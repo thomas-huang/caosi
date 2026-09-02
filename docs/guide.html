@@ -116,27 +116,28 @@
   <pre><code>export ANTHROPIC_BASE_URL=http://127.0.0.1:9999/deepseek
 export ANTHROPIC_API_KEY=dummy
 claude</code></pre>
-  <p>Claude Code 会打 <code>/v1/messages</code>。如果这条 Provider 的 protocol 是 <code>openai_chat</code>，caosi 会转换成 Chat Completions。</p>
+  <p>Claude Code 会打 <code>/v1/messages</code>。上游无论是 Chat、Responses 还是 Gemini，caosi 都会转成对应协议。</p>
 
   <h3>OpenAI SDK / Chat Completions 客户端</h3>
   <pre><code>export OPENAI_BASE_URL=http://127.0.0.1:9999/deepseek/v1
 export OPENAI_API_KEY=dummy</code></pre>
-  <p>走 <code>/v1/chat/completions</code>，上游也是 <code>openai_chat</code> 时是透传。</p>
-  <p><strong>这一版还不能把 OpenAI Responses 转成 Chat。</strong> Codex 默认打 <code>/v1/responses</code>。若 Provider 是 <code>openai_chat</code>，会收到明确的 501。先用 Chat Completions 客户端，或把 Provider 的 protocol 改成 <code>openai_responses</code> 做同协议透传。</p>
+  <p>走 <code>/v1/chat/completions</code> 或 Codex 的 <code>/v1/responses</code>。和上游协议相同则透传；不同则转换（例如 Codex → DeepSeek Chat）。</p>
 
   <h3>Gemini CLI</h3>
   <pre><code># 把 API base 指到 http://127.0.0.1:9999/{provider_name}
 # 请求路径仍是 :generateContent</code></pre>
-  <p>这一版 Gemini 只有上游也是 <code>gemini</code> 时才透传。跨协议先做了 <strong>Claude Messages → OpenAI Chat</strong>。</p>
+  <p>Gemini 客户端可以打 OpenAI / Claude / Gemini 上游。同协议透传，跨协议会转换。</p>
 
   <h2>这一版能做什么</h2>
   <ul>
     <li class="ok">同协议透传（body 不改，除非配了 model）</li>
-    <li class="ok">Claude Messages → OpenAI Chat（含流式文本）</li>
+    <li class="ok">OpenAI Chat、OpenAI Responses、Claude Messages、Gemini 之间互相转换（含流式）</li>
+    <li class="ok">文本、system、tools、thinking/reasoning、消息里的图片块按 Conversion Contract 映射</li>
+    <li class="ok">改 <code>providers.jsonc</code> 会热加载；坏文件保留上一份可用配置</li>
     <li class="ok">注入 api_key / headers，丢掉客户端自带的密钥头</li>
     <li class="ok">只绑 127.0.0.1，端口默认 9999，可用 <code>--port</code> / <code>--config-dir</code></li>
   </ul>
-  <p>还没做（下一批）：OpenAI Responses / Gemini 的跨协议网格、热加载、完整 thinking/图片合同、故障转移。</p>
+  <p>caosi 不做 Web UI、OAuth、故障转移或接管客户端配置。</p>
 
   <h2 id="next">下一步建议</h2>
   <div class="card next">

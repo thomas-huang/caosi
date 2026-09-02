@@ -1,6 +1,6 @@
 # caosi
 
-本机 LLM 协议转换器。Claude Code、Codex、Gemini CLI 打到 `http://127.0.0.1:9999/{provider_name}`，caosi 按 `providers.jsonc` 转到上游；同协议透传，Claude Messages → OpenAI Chat 会转换。
+本机 LLM 协议转换器。Claude Code、Codex、Gemini CLI 打到 `http://127.0.0.1:9999/{provider_name}`，caosi 按 `providers.jsonc` 转到上游。同协议透传；OpenAI Chat / Responses、Claude Messages、Gemini 之间会转换。改配置会热加载。
 
 **给试用者的说明（请打开这一页）：** [docs/guide.html](docs/guide.html)
 

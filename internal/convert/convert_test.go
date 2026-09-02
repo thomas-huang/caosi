@@ -152,8 +152,117 @@ func TestOpenAIChatToClaude_ThinkingField(t *testing.T) {
 	}
 }
 
-func TestUnsupportedPair(t *testing.T) {
-	if Supported(config.ProtocolGemini, config.ProtocolClaudeMessages) {
-		t.Fatal("gemini→claude should be unsupported in this build")
+func TestGridSupported(t *testing.T) {
+	protos := []config.Protocol{
+		config.ProtocolOpenAIChat, config.ProtocolOpenAIResponses,
+		config.ProtocolClaudeMessages, config.ProtocolGemini,
+	}
+	for _, c := range protos {
+		for _, u := range protos {
+			if !Supported(c, u) {
+				t.Fatalf("unsupported %s → %s", c, u)
+			}
+		}
+	}
+}
+
+func TestResponsesToChatRequest(t *testing.T) {
+	in := []byte(`{"model":"gpt-x","instructions":"sys","input":[{"role":"user","content":[{"type":"input_text","text":"hi"}]}],"reasoning":{"effort":"high"}}`)
+	out, err := Request(config.ProtocolOpenAIResponses, config.ProtocolOpenAIChat, in, "deepseek-chat", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	if !strings.Contains(s, `"role":"system"`) || !strings.Contains(s, "hi") {
+		t.Fatalf("chat remap: %s", s)
+	}
+	if !strings.Contains(s, `"reasoning_effort":"high"`) {
+		t.Fatalf("thinking: %s", s)
+	}
+	if !strings.Contains(s, "deepseek-chat") {
+		t.Fatalf("model: %s", s)
+	}
+}
+
+func TestClaudeToResponsesRequest(t *testing.T) {
+	in := []byte(`{"model":"claude-opus","max_tokens":32,"system":"be brief","messages":[{"role":"user","content":"hi"}],"thinking":{"type":"enabled","budget_tokens":8000},"tools":[{"name":"get_weather","description":"w","input_schema":{"type":"object"}}]}`)
+	out, err := Request(config.ProtocolClaudeMessages, config.ProtocolOpenAIResponses, in, "o4-mini", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	if strings.Contains(s, `"choices"`) {
+		t.Fatalf("leaked chat schema: %s", s)
+	}
+	if !strings.Contains(s, `"instructions"`) && !strings.Contains(s, "be brief") {
+		t.Fatalf("system: %s", s)
+	}
+	if !strings.Contains(s, "get_weather") {
+		t.Fatalf("tools: %s", s)
+	}
+	if !strings.Contains(s, `"effort"`) {
+		t.Fatalf("thinking: %s", s)
+	}
+}
+
+func TestGeminiToChatRequest(t *testing.T) {
+	in := []byte(`{"systemInstruction":{"parts":[{"text":"sys"}]},"contents":[{"role":"user","parts":[{"text":"hello"},{"inlineData":{"mimeType":"image/png","data":"QQ=="}}]}],"generationConfig":{"thinkingConfig":{"thinkingLevel":"HIGH"}}}`)
+	out, err := Request(config.ProtocolGemini, config.ProtocolOpenAIChat, in, "deepseek-chat", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	if !strings.Contains(s, "hello") || !strings.Contains(s, `"role":"system"`) {
+		t.Fatalf("gemini→chat: %s", s)
+	}
+	if !strings.Contains(s, "image_url") || !strings.Contains(s, "data:image/png") {
+		t.Fatalf("image: %s", s)
+	}
+	if !strings.Contains(s, `"reasoning_effort":"high"`) {
+		t.Fatalf("thinking: %s", s)
+	}
+}
+
+func TestResponsesErrorNullIsSuccess(t *testing.T) {
+	in := []byte(`{"id":"resp_1","object":"response","status":"completed","error":null,"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"pong"}]}]}`)
+	out, err := Response(config.ProtocolClaudeMessages, config.ProtocolOpenAIResponses, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	if strings.Contains(s, "upstream error") {
+		t.Fatalf("error:null treated as failure: %s", s)
+	}
+	if !strings.Contains(s, `"type":"message"`) || !strings.Contains(s, "pong") {
+		t.Fatalf("want Claude text, got %s", s)
+	}
+}
+
+func TestResponsesImageOnlyToChat(t *testing.T) {
+	in := []byte(`{"model":"gpt-x","input":[{"role":"user","content":[{"type":"input_image","image_url":"data:image/png;base64,QQ=="}]}]}`)
+	out, err := Request(config.ProtocolOpenAIResponses, config.ProtocolOpenAIChat, in, "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	if !strings.Contains(s, "image_url") || !strings.Contains(s, "data:image/png;base64,QQ==") {
+		t.Fatalf("image-only dropped: %s", s)
+	}
+}
+
+func TestChatToResponsesResponseShape(t *testing.T) {
+	in := []byte(`{"id":"chatcmpl-1","choices":[{"message":{"role":"assistant","content":"pong","reasoning_content":"hmm"},"finish_reason":"stop"}]}`)
+	out, err := Response(config.ProtocolOpenAIResponses, config.ProtocolOpenAIChat, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(out), `"choices"`) {
+		t.Fatalf("chat leaked: %s", out)
+	}
+	if !strings.Contains(string(out), `"object":"response"`) || !strings.Contains(string(out), "pong") {
+		t.Fatalf("responses: %s", out)
+	}
+	if !strings.Contains(string(out), "hmm") {
+		t.Fatalf("thinking: %s", out)
 	}
 }

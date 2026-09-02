@@ -9,7 +9,9 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"caosi/internal/config"
@@ -21,6 +23,7 @@ import (
 const maxBody = 32 << 20
 
 type Server struct {
+	mu     sync.RWMutex
 	file   *config.File
 	log    *slog.Logger
 	client *http.Client
@@ -54,12 +57,55 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
+func (s *Server) File() *config.File {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.file
+}
+
+func (s *Server) ReplaceFile(f *config.File) {
+	s.mu.Lock()
+	s.file = f
+	s.mu.Unlock()
+}
+
+// WatchConfig polls the Provider File and swaps in a newly loaded map.
+// Illegal saves are logged and the last good File is kept.
+func (s *Server) WatchConfig(ctx context.Context, configDir string) {
+	path := config.ProviderFilePath(configDir)
+	var lastMod time.Time
+	if st, err := os.Stat(path); err == nil {
+		lastMod = st.ModTime()
+	}
+	t := time.NewTicker(200 * time.Millisecond)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			st, err := os.Stat(path)
+			if err != nil || !st.ModTime().After(lastMod) {
+				continue
+			}
+			lastMod = st.ModTime()
+			f, err := config.Load(configDir)
+			if err != nil {
+				s.log.Error("reload failed; keeping last good config", "err", err)
+				continue
+			}
+			s.ReplaceFile(f)
+			s.log.Info("reloaded providers")
+		}
+	}
+}
+
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	names := config.Names(s.file)
+	names := config.Names(s.File())
 	body, _ := json.Marshal(map[string]any{
 		"ok":        true,
 		"providers": names,
@@ -81,7 +127,8 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	name, rest := splitProvider(path)
 	clientProto, detected := protocol.Detect(rest)
-	p := s.file.Providers[name]
+	file := s.File()
+	p := file.Providers[name]
 	if p == nil {
 		s.writeClientError(w, clientProto, http.StatusNotFound,
 			"没有叫 "+name+" 的 Provider。检查 providers.jsonc 里的 key，或打开 /health 看当前列表。")
@@ -121,10 +168,16 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	upPath := convert.UpstreamPath(clientProto, p.Protocol, rest)
+	model := p.Model
+	if model == "" {
+		model = convert.ModelFromBody(body)
+	}
+	upPath := convert.UpstreamPath(clientProto, p.Protocol, rest, model, stream)
 	upURL := protocol.JoinURL(p.BaseURL, upPath)
 	if r.URL.RawQuery != "" && !convert.NeedsConvert(clientProto, p.Protocol) {
 		upURL = upURL + "?" + r.URL.RawQuery
+	} else if p.Protocol == config.ProtocolGemini && stream && convert.NeedsConvert(clientProto, p.Protocol) {
+		upURL += "?alt=sse"
 	}
 
 	req, err := http.NewRequestWithContext(r.Context(), r.Method, upURL, bytes.NewReader(upBody))
@@ -158,12 +211,12 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if isSSE && clientProto == config.ProtocolClaudeMessages && p.Protocol == config.ProtocolOpenAIChat {
+	if isSSE {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
 		w.WriteHeader(resp.StatusCode)
-		err := convert.OpenAIChatStreamToClaude(resp.Body, &flushWriter{w: w})
+		err := convert.Stream(clientProto, p.Protocol, resp.Body, &flushWriter{w: w})
 		if err != nil && r.Context().Err() == nil {
 			s.log.Warn("stream convert", "err", err)
 		}

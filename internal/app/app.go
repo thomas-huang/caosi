@@ -116,6 +116,7 @@ func MainContext(ctx context.Context, args []string, stdout, stderr io.Writer) i
 		_ = httpSrv.Shutdown(shCtx)
 	}()
 
+	go srv.WatchConfig(ctx, dir)
 	warnPlaceholders(stderr, file)
 	printReady(stderr, ln.Addr().String(), file)
 	err = httpSrv.Serve(ln)
