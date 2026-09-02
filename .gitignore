@@ -1,0 +1,6 @@
+/caosi
+/caosi.exe
+*.test
+*.out
+.DS_Store
+/tmp/

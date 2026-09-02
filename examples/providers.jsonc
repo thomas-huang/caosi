@@ -1,0 +1,9 @@
+// 复制到 ~/.caosi/providers.jsonc 后填入真实 api_key。
+{
+  "deepseek": {
+    "base_url": "https://api.deepseek.com",
+    "protocol": "openai_chat",
+    "api_key": "sk-your-key-here",
+    "model": "deepseek-chat",
+  },
+}

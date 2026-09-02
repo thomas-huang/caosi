@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>caosi — 本机 LLM 协议转换器</title>
+  <style>
+    :root {
+      --bg: #f6f4ef;
+      --ink: #1c1917;
+      --muted: #57534e;
+      --card: #fff;
+      --line: #e7e5e4;
+      --accent: #b45309;
+      --ok: #166534;
+      --code: #1e1b16;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 16px/1.55 "Source Han Sans SC", "Noto Sans SC", "PingFang SC", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+    }
+    main {
+      max-width: 44rem;
+      margin: 0 auto;
+      padding: 2.5rem 1.25rem 4rem;
+    }
+    h1 { font-size: 1.85rem; letter-spacing: -0.03em; margin: 0 0 .4rem; }
+    h2 { font-size: 1.2rem; margin: 2.2rem 0 .7rem; }
+    p, li { color: var(--ink); }
+    .lede { font-size: 1.05rem; color: var(--muted); margin: 0 0 1.5rem; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 1rem 1.1rem;
+      margin: 1rem 0;
+    }
+    code, pre {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: .9em;
+    }
+    code {
+      background: #edeae4;
+      padding: .1em .35em;
+      border-radius: 4px;
+    }
+    pre {
+      background: var(--code);
+      color: #f5f5f4;
+      padding: 1rem 1.1rem;
+      border-radius: 10px;
+      overflow-x: auto;
+      line-height: 1.45;
+    }
+    pre code { background: none; color: inherit; padding: 0; }
+    .ok { color: var(--ok); font-weight: 600; }
+    .next { border-left: 4px solid var(--accent); }
+    a { color: #9a3412; }
+    table { width: 100%; border-collapse: collapse; font-size: .95rem; }
+    th, td { text-align: left; padding: .45rem .4rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; }
+    .kicker { text-transform: uppercase; letter-spacing: .12em; font-size: .72rem; color: var(--accent); font-weight: 700; }
+  </style>
+</head>
+<body>
+<main>
+  <p class="kicker">local converter</p>
+  <h1>caosi</h1>
+  <p class="lede">在你自己的电脑上跑的轻量 CLI。Claude Code、Codex、Gemini CLI 可以继续说自己的协议；caosi 按名字转到你配置的上游，必要时做协议转换。</p>
+
+  <div class="card">
+    <strong>默认入口</strong>
+    <p style="margin:.4rem 0 0"><code>http://127.0.0.1:9999/{provider_name}</code></p>
+    <p style="margin:.5rem 0 0;color:var(--muted)">只绑 loopback。配置在 <code>~/.caosi/providers.jsonc</code>。</p>
+  </div>
+
+  <h2>60 秒上手</h2>
+  <ol>
+    <li>编译并第一次运行（会写样例然后退出，这是故意的）：
+      <pre><code>go build -o caosi ./cmd/caosi
+./caosi</code></pre>
+    </li>
+    <li>打开 <code>~/.caosi/providers.jsonc</code>，把 <code>api_key</code> 换成真密钥。用 Claude Code 打 OpenAI 兼容上游时，<strong>务必保留 <code>model</code></strong>（例如 <code>deepseek-chat</code>），否则上游会看到 <code>claude-*</code> 而 400。</li>
+    <li>再运行 <code>./caosi</code>。看到「正在监听」之后：
+      <pre><code>curl -s http://127.0.0.1:9999/health</code></pre>
+    </li>
+  </ol>
+
+  <h2>怎么配一条 Provider</h2>
+  <p>文件是 JSONC（可以写 <code>//</code> 注释）。<strong>key 就是 URL 里的名字。</strong></p>
+  <pre><code>{
+  "deepseek": {
+    "base_url": "https://api.deepseek.com",
+    "protocol": "openai_chat",
+    "api_key": "sk-...",
+    // "model": "deepseek-chat"
+  }
+}</code></pre>
+  <table>
+    <tr><th>protocol</th><th>上游说话方式</th></tr>
+    <tr><td><code>openai_chat</code></td><td>OpenAI Chat Completions</td></tr>
+    <tr><td><code>openai_responses</code></td><td>OpenAI Responses</td></tr>
+    <tr><td><code>claude_messages</code></td><td>Claude Messages</td></tr>
+    <tr><td><code>gemini</code></td><td>Gemini generateContent</td></tr>
+  </table>
+  <p><code>model</code> 可选：填了就改写客户端带来的模型名。<code>headers</code> 可选，用来补 OpenRouter 之类的额外头。</p>
+  <p><code>base_url</code> 是前缀，caosi 不会自作聪明地剥 <code>/v1</code>。写成上游真正要接的根，例如 DeepSeek 用 <code>https://api.deepseek.com</code>。</p>
+
+  <h2>把客户端指过来</h2>
+  <p>把 Base URL 设成 <code>http://127.0.0.1:9999/deepseek</code>（换成你的 Provider Name）。客户端密钥可以随便填，caosi 不会把它转到上游，只用配置里的 <code>api_key</code>。</p>
+
+  <h3>Claude Code</h3>
+  <pre><code>export ANTHROPIC_BASE_URL=http://127.0.0.1:9999/deepseek
+export ANTHROPIC_API_KEY=dummy
+claude</code></pre>
+  <p>Claude Code 会打 <code>/v1/messages</code>。如果这条 Provider 的 protocol 是 <code>openai_chat</code>，caosi 会转换成 Chat Completions。</p>
+
+  <h3>OpenAI SDK / Chat Completions 客户端</h3>
+  <pre><code>export OPENAI_BASE_URL=http://127.0.0.1:9999/deepseek/v1
+export OPENAI_API_KEY=dummy</code></pre>
+  <p>走 <code>/v1/chat/completions</code>，上游也是 <code>openai_chat</code> 时是透传。</p>
+  <p><strong>这一版还不能把 OpenAI Responses 转成 Chat。</strong> Codex 默认打 <code>/v1/responses</code>。若 Provider 是 <code>openai_chat</code>，会收到明确的 501。先用 Chat Completions 客户端，或把 Provider 的 protocol 改成 <code>openai_responses</code> 做同协议透传。</p>
+
+  <h3>Gemini CLI</h3>
+  <pre><code># 把 API base 指到 http://127.0.0.1:9999/{provider_name}
+# 请求路径仍是 :generateContent</code></pre>
+  <p>这一版 Gemini 只有上游也是 <code>gemini</code> 时才透传。跨协议先做了 <strong>Claude Messages → OpenAI Chat</strong>。</p>
+
+  <h2>这一版能做什么</h2>
+  <ul>
+    <li class="ok">同协议透传（body 不改，除非配了 model）</li>
+    <li class="ok">Claude Messages → OpenAI Chat（含流式文本）</li>
+    <li class="ok">注入 api_key / headers，丢掉客户端自带的密钥头</li>
+    <li class="ok">只绑 127.0.0.1，端口默认 9999，可用 <code>--port</code> / <code>--config-dir</code></li>
+  </ul>
+  <p>还没做（下一批）：OpenAI Responses / Gemini 的跨协议网格、热加载、完整 thinking/图片合同、故障转移。</p>
+
+  <h2 id="next">下一步建议</h2>
+  <div class="card next">
+    <ol>
+      <li>用 <code>curl /health</code> 确认进程活着。</li>
+      <li>先配一条你已经有密钥的 OpenAI 兼容端点（DeepSeek / OpenRouter / 本地 vLLM）。</li>
+      <li>用 Claude Code 对它发一句「只回 ok」，看终端里的请求日志，类似：<code>deepseek  claude_messages→openai_chat  conversion  200  1ms</code>。</li>
+      <li>也可以先不接 Claude Code，直接：
+        <pre><code>curl -s http://127.0.0.1:9999/deepseek/v1/messages \
+  -H 'content-type: application/json' \
+  -d '{"model":"claude-opus","max_tokens":16,"messages":[{"role":"user","content":"只回 ok"}]}'</code></pre>
+      </li>
+      <li>同一条 Provider，再用 OpenAI 客户端打 <code>/v1/chat/completions</code>，日志应是 <code>passthrough</code>。</li>
+      <li>若 401：密钥或 <code>base_url</code> 不对，不是协议问题。若路径变成 <code>/v1/v1/...</code>：把 <code>base_url</code> 末尾的 <code>/v1</code> 拿掉。</li>
+    </ol>
+  </div>
+
+  <h2>常用命令</h2>
+  <pre><code>./caosi --help
+./caosi --port 9999 --config-dir ~/.caosi --log-level info</code></pre>
+  <p>日志打在 stderr，一行一条，不含请求/响应 body。</p>
+
+  <p style="margin-top:2.5rem;color:var(--muted);font-size:.9rem">caosi 不是网关管理器：没有 Web UI、没有 OAuth、不会改你的 Claude Code 配置文件。</p>
+</main>
+</body>
+</html>
