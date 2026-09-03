@@ -189,6 +189,7 @@ func printReady(w io.Writer, addr string, file *config.File) {
   POST /{provider_name}/v1/messages            Claude
   POST /{provider_name}/v1/chat/completions    OpenAI Chat
   POST /{provider_name}/v1/responses           OpenAI Responses
+  POST /{provider_name}/v1beta/models/…:generateContent  Gemini
 
 providers: %s
 
