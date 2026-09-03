@@ -59,6 +59,69 @@ func TestStream_ClaudeUpstreamSSEAssemblesText(t *testing.T) {
 	}
 }
 
+func TestWriteClaudeOneShotSSE_LegalEventSequence(t *testing.T) {
+	in := []byte(`{
+	  "id":"msg_1","type":"message","role":"assistant","model":"glm-5.3",
+	  "content":[
+	    {"type":"thinking","thinking":"hmm"},
+	    {"type":"text","text":"ok"},
+	    {"type":"tool_use","id":"toolu_1","name":"read_file","input":{"path":"README.md"}}
+	  ],
+	  "stop_reason":"tool_use",
+	  "usage":{"input_tokens":9,"output_tokens":4}
+	}`)
+	var out bytes.Buffer
+	if err := writeClaudeOneShotSSE(&out, in); err != nil {
+		t.Fatal(err)
+	}
+	s := out.String()
+	for _, want := range []string{
+		"event: message_start",
+		`"content":[]`,
+		"event: content_block_start",
+		"event: content_block_delta",
+		`"type":"thinking_delta"`,
+		"hmm",
+		`"type":"text_delta"`,
+		"ok",
+		`"type":"input_json_delta"`,
+		"read_file",
+		"README.md",
+		"event: content_block_stop",
+		"event: message_delta",
+		"tool_use",
+		"event: message_stop",
+	} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("missing %q in\n%s", want, s)
+		}
+	}
+	if strings.Contains(s, `"content":[{"type":"thinking"`) || strings.Contains(s, `"content":[{"type":"text"`) {
+		t.Fatalf("message_start still stuffed with completed content:\n%s", s)
+	}
+}
+
+func TestStream_ClaudeClientResponsesJSON_LegalSSE(t *testing.T) {
+	in := `{"id":"resp_1","object":"response","status":"completed","error":null,"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ok"}]}]}`
+	var out bytes.Buffer
+	if err := Stream(config.ProtocolClaudeMessages, config.ProtocolOpenAIResponses, strings.NewReader(in), &out); err != nil {
+		t.Fatal(err)
+	}
+	s := out.String()
+	if !strings.Contains(s, "event: content_block_delta") || !strings.Contains(s, `"type":"text_delta"`) {
+		t.Fatalf("want legal Claude SSE, got\n%s", s)
+	}
+	if !strings.Contains(s, "ok") {
+		t.Fatalf("lost text:\n%s", s)
+	}
+	if !strings.Contains(s, "event: message_delta") || !strings.Contains(s, "event: message_stop") {
+		t.Fatalf("missing close events:\n%s", s)
+	}
+	if strings.Contains(s, `"content":[{"type":"text"`) {
+		t.Fatalf("message_start stuffed with content:\n%s", s)
+	}
+}
+
 func TestOpenAIChatStreamToResponses_IncludesReasoning(t *testing.T) {
 	in := strings.Join([]string{
 		`data: {"id":"chatcmpl-1","choices":[{"delta":{"reasoning_content":"think"}}]}`,

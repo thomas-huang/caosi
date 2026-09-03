@@ -148,7 +148,8 @@ export OPENAI_API_KEY=dummy</code></pre>
       <li>也可以先不接 Claude Code，直接：
         <pre><code>curl -s http://127.0.0.1:9999/deepseek/v1/messages \
   -H 'content-type: application/json' \
-  -d '{"model":"claude-opus","max_tokens":16,"messages":[{"role":"user","content":"只回 ok"}]}'</code></pre>
+  -d '{"model":"claude-opus","max_tokens":1024,"messages":[{"role":"user","content":"只回 ok"}]}'</code></pre>
+        推理模型会先占用 thinking；<code>max_tokens</code> 太小会只看到 thinking、看不到 ok。
       </li>
       <li>同一条 Provider，再用 OpenAI 客户端打 <code>/v1/chat/completions</code>，日志应是 <code>passthrough</code>。</li>
       <li>若 401：密钥或 <code>base_url</code> 不对，不是协议问题。若路径变成 <code>/v1/v1/...</code>：把 <code>base_url</code> 末尾的 <code>/v1</code> 拿掉。</li>

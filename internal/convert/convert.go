@@ -379,17 +379,164 @@ func unwrapEventEnvelope(raw []byte) []byte {
 	return raw
 }
 
+// writeClaudeOneShotSSE turns a completed Claude message into a legal Messages SSE
+// sequence. Claude Code ignores content on message_start and treats a stream
+// without content_block_* as "ended before any complete data".
 func writeClaudeOneShotSSE(w io.Writer, messageJSON []byte) error {
-	var msg map[string]any
+	var probe map[string]json.RawMessage
+	if err := json.Unmarshal(messageJSON, &probe); err != nil {
+		return err
+	}
+	if strings.Trim(string(probe["type"]), `"`) == "error" {
+		return writeSSE(w, "error", messageJSON)
+	}
+
+	var msg claudeResp
 	if err := json.Unmarshal(messageJSON, &msg); err != nil {
 		return err
 	}
-	start, _ := json.Marshal(map[string]any{"type": "message_start", "message": msg})
+	if msg.ID == "" {
+		msg.ID = "msg_caosi"
+	}
+	if msg.Role == "" {
+		msg.Role = "assistant"
+	}
+
+	start, err := json.Marshal(map[string]any{
+		"type": "message_start",
+		"message": map[string]any{
+			"id":          msg.ID,
+			"type":        "message",
+			"role":        msg.Role,
+			"model":       msg.Model,
+			"content":     []any{},
+			"stop_reason": nil,
+			"usage": map[string]int{
+				"input_tokens":  msg.Usage.InputTokens,
+				"output_tokens": 0,
+			},
+		},
+	})
+	if err != nil {
+		return err
+	}
 	if err := writeSSE(w, "message_start", start); err != nil {
 		return err
 	}
-	stop, _ := json.Marshal(map[string]any{"type": "message_stop"})
+
+	for i, block := range msg.Content {
+		if err := writeClaudeOneShotBlock(w, i, block); err != nil {
+			return err
+		}
+		stop, err := json.Marshal(map[string]any{"type": "content_block_stop", "index": i})
+		if err != nil {
+			return err
+		}
+		if err := writeSSE(w, "content_block_stop", stop); err != nil {
+			return err
+		}
+	}
+
+	stopReason := msg.StopReason
+	if stopReason == "" {
+		stopReason = "end_turn"
+	}
+	delta, err := json.Marshal(map[string]any{
+		"type": "message_delta",
+		"delta": map[string]any{
+			"stop_reason":   stopReason,
+			"stop_sequence": nil,
+		},
+		"usage": map[string]int{"output_tokens": msg.Usage.OutputTokens},
+	})
+	if err != nil {
+		return err
+	}
+	if err := writeSSE(w, "message_delta", delta); err != nil {
+		return err
+	}
+	stop, err := json.Marshal(map[string]any{"type": "message_stop"})
+	if err != nil {
+		return err
+	}
 	return writeSSE(w, "message_stop", stop)
+}
+
+func writeClaudeOneShotBlock(w io.Writer, index int, block claudeBlock) error {
+	switch block.Type {
+	case "thinking":
+		start, err := json.Marshal(map[string]any{
+			"type":          "content_block_start",
+			"index":         index,
+			"content_block": map[string]any{"type": "thinking", "thinking": ""},
+		})
+		if err != nil {
+			return err
+		}
+		if err := writeSSE(w, "content_block_start", start); err != nil {
+			return err
+		}
+		delta, err := json.Marshal(map[string]any{
+			"type":  "content_block_delta",
+			"index": index,
+			"delta": map[string]any{"type": "thinking_delta", "thinking": block.Thinking},
+		})
+		if err != nil {
+			return err
+		}
+		return writeSSE(w, "content_block_delta", delta)
+	case "tool_use":
+		start, err := json.Marshal(map[string]any{
+			"type":  "content_block_start",
+			"index": index,
+			"content_block": map[string]any{
+				"type":  "tool_use",
+				"id":    block.ID,
+				"name":  block.Name,
+				"input": map[string]any{},
+			},
+		})
+		if err != nil {
+			return err
+		}
+		if err := writeSSE(w, "content_block_start", start); err != nil {
+			return err
+		}
+		partial := "{}"
+		if len(bytes.TrimSpace(block.Input)) > 0 {
+			partial = string(block.Input)
+		}
+		delta, err := json.Marshal(map[string]any{
+			"type":  "content_block_delta",
+			"index": index,
+			"delta": map[string]any{"type": "input_json_delta", "partial_json": partial},
+		})
+		if err != nil {
+			return err
+		}
+		return writeSSE(w, "content_block_delta", delta)
+	default:
+		start, err := json.Marshal(map[string]any{
+			"type":          "content_block_start",
+			"index":         index,
+			"content_block": map[string]any{"type": "text", "text": ""},
+		})
+		if err != nil {
+			return err
+		}
+		if err := writeSSE(w, "content_block_start", start); err != nil {
+			return err
+		}
+		delta, err := json.Marshal(map[string]any{
+			"type":  "content_block_delta",
+			"index": index,
+			"delta": map[string]any{"type": "text_delta", "text": block.Text},
+		})
+		if err != nil {
+			return err
+		}
+		return writeSSE(w, "content_block_delta", delta)
+	}
 }
 
 func writeResponsesOneShotSSE(w io.Writer, respJSON []byte) error {
