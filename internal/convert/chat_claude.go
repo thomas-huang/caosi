@@ -51,6 +51,9 @@ func OpenAIChatToClaudeRequest(body []byte, model string, stream bool) ([]byte, 
 				role = "user"
 			}
 			var blocks []any
+			if m.ReasoningContent != "" {
+				blocks = append(blocks, map[string]any{"type": "thinking", "thinking": m.ReasoningContent})
+			}
 			if s := contentAsString(m.Content); s != "" && !hasImageContent(m.Content) {
 				blocks = append(blocks, map[string]any{"type": "text", "text": s})
 			} else {

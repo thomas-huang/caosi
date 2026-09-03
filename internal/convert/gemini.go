@@ -175,11 +175,13 @@ func geminiContentToChat(c geminiContent) []openaiMsg {
 			})
 		}
 	}
-	_ = thinking
-	if len(toolResults) > 0 && len(toolCalls) == 0 && text.Len() == 0 {
+	if len(toolResults) > 0 && len(toolCalls) == 0 && text.Len() == 0 && thinking.Len() == 0 {
 		return toolResults
 	}
 	msg := openaiMsg{Role: role}
+	if thinking.Len() > 0 {
+		msg.ReasoningContent = thinking.String()
+	}
 	if len(toolCalls) > 0 {
 		msg.ToolCalls = toolCalls
 		if text.Len() > 0 {
@@ -189,8 +191,11 @@ func geminiContentToChat(c geminiContent) []openaiMsg {
 	}
 	if hasImage(parts) {
 		msg.Content = parts
-	} else {
+	} else if text.Len() > 0 {
 		msg.Content = text.String()
+	}
+	if msg.Content == nil && msg.ReasoningContent == "" {
+		msg.Content = ""
 	}
 	return []openaiMsg{msg}
 }

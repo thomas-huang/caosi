@@ -205,6 +205,39 @@ func TestClaudeToResponsesRequest(t *testing.T) {
 	}
 }
 
+func TestGeminiRequest_ThoughtPartsPreserved(t *testing.T) {
+	in := []byte(`{"contents":[{"role":"user","parts":[{"text":"hi"}]},{"role":"model","parts":[{"thought":true,"text":"secret think"},{"text":"hello"}]}]}`)
+	chat, err := Request(config.ProtocolGemini, config.ProtocolOpenAIChat, in, "m", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(chat)
+	if !strings.Contains(s, `"reasoning_content"`) || !strings.Contains(s, "secret think") {
+		t.Fatalf("Gemini thought dropped on Chat Conversion:\n%s", s)
+	}
+	if !strings.Contains(s, "hello") {
+		t.Fatalf("text dropped:\n%s", s)
+	}
+
+	claude, err := Request(config.ProtocolGemini, config.ProtocolClaudeMessages, in, "m", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cs := string(claude)
+	if !strings.Contains(cs, `"type":"thinking"`) || !strings.Contains(cs, "secret think") {
+		t.Fatalf("Gemini thought dropped on Claude Conversion:\n%s", cs)
+	}
+
+	resp, err := Request(config.ProtocolGemini, config.ProtocolOpenAIResponses, in, "m", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rs := string(resp)
+	if !strings.Contains(rs, `"type":"reasoning"`) || !strings.Contains(rs, "secret think") {
+		t.Fatalf("Gemini thought dropped on Responses Conversion:\n%s", rs)
+	}
+}
+
 func TestGeminiToChatRequest(t *testing.T) {
 	in := []byte(`{"systemInstruction":{"parts":[{"text":"sys"}]},"contents":[{"role":"user","parts":[{"text":"hello"},{"inlineData":{"mimeType":"image/png","data":"QQ=="}}]}],"generationConfig":{"thinkingConfig":{"thinkingLevel":"HIGH"}}}`)
 	out, err := Request(config.ProtocolGemini, config.ProtocolOpenAIChat, in, "deepseek-chat", false)

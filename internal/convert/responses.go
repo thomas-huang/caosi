@@ -224,6 +224,12 @@ func ChatToResponses(body []byte, model string, stream bool) ([]byte, error) {
 				"output":  contentAsString(msg.Content),
 			})
 		default:
+			if msg.ReasoningContent != "" {
+				input = append(input, map[string]any{
+					"type":    "reasoning",
+					"summary": []any{map[string]any{"type": "summary_text", "text": msg.ReasoningContent}},
+				})
+			}
 			if len(msg.ToolCalls) > 0 {
 				for _, tc := range msg.ToolCalls {
 					input = append(input, map[string]any{
