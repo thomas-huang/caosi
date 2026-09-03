@@ -2,8 +2,11 @@ package convert
 
 import (
 	"bytes"
+	"io"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"caosi/internal/config"
 )
@@ -119,6 +122,193 @@ func TestStream_ClaudeClientResponsesJSON_LegalSSE(t *testing.T) {
 	}
 	if strings.Contains(s, `"content":[{"type":"text"`) {
 		t.Fatalf("message_start stuffed with content:\n%s", s)
+	}
+}
+
+type syncBuf struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuf) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuf) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
+}
+
+func waitContains(t *testing.T, buf *syncBuf, sub string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if strings.Contains(buf.String(), sub) {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %q, got:\n%s", sub, buf.String())
+}
+
+func TestStream_ClaudeFromResponses_TextDeltaBeforeCompleted(t *testing.T) {
+	pr, pw := io.Pipe()
+	t.Cleanup(func() { _ = pw.Close() })
+	out := &syncBuf{}
+	done := make(chan error, 1)
+	go func() {
+		done <- Stream(config.ProtocolClaudeMessages, config.ProtocolOpenAIResponses, pr, out)
+	}()
+
+	if _, err := io.WriteString(pw, "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"hel\"}\n\n"); err != nil {
+		t.Fatal(err)
+	}
+	waitContains(t, out, `"type":"text_delta"`)
+	waitContains(t, out, "hel")
+	if strings.Contains(out.String(), "message_stop") {
+		t.Fatal("emitted message_stop before response.completed")
+	}
+
+	if _, err := io.WriteString(pw, "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"status\":\"completed\"}}\n\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := pw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stream did not return after response.completed")
+	}
+	if !strings.Contains(out.String(), "event: message_stop") {
+		t.Fatalf("missing message_stop:\n%s", out.String())
+	}
+}
+
+func TestStream_ClaudeFromResponses_ThinkingAndToolBeforeCompleted(t *testing.T) {
+	pr, pw := io.Pipe()
+	t.Cleanup(func() { _ = pw.Close() })
+	out := &syncBuf{}
+	done := make(chan error, 1)
+	go func() {
+		done <- Stream(config.ProtocolClaudeMessages, config.ProtocolOpenAIResponses, pr, out)
+	}()
+
+	if _, err := io.WriteString(pw, "event: response.reasoning_summary_text.delta\ndata: {\"type\":\"response.reasoning_summary_text.delta\",\"delta\":\"hmm\"}\n\n"); err != nil {
+		t.Fatal(err)
+	}
+	waitContains(t, out, `"type":"thinking_delta"`)
+	waitContains(t, out, "hmm")
+
+	if _, err := io.WriteString(pw, "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_1\",\"type\":\"function_call\",\"name\":\"read_file\",\"call_id\":\"call_1\",\"arguments\":\"\"}}\n\n"); err != nil {
+		t.Fatal(err)
+	}
+	waitContains(t, out, `"type":"tool_use"`)
+	waitContains(t, out, "read_file")
+
+	if _, err := io.WriteString(pw, "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"item_id\":\"fc_1\",\"delta\":\"{\\\"path\\\":\\\"README.md\\\"}\"}\n\n"); err != nil {
+		t.Fatal(err)
+	}
+	waitContains(t, out, `"type":"input_json_delta"`)
+	waitContains(t, out, "README.md")
+	if strings.Contains(out.String(), "message_stop") {
+		t.Fatal("emitted message_stop before response.completed")
+	}
+
+	if _, err := io.WriteString(pw, "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"status\":\"completed\"}}\n\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := pw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stream did not return after response.completed")
+	}
+}
+
+func TestStream_ClaudeFromResponses_CompletedSnapshotWithoutDeltas(t *testing.T) {
+	in := strings.Join([]string{
+		`event: response.created`,
+		`data: {"type":"response.created","response":{"id":"resp_1","status":"in_progress"}}`,
+		``,
+		`event: response.completed`,
+		`data: {"type":"response.completed","response":{"id":"resp_1","object":"response","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ok"}]},{"type":"reasoning","summary":[{"type":"summary_text","text":"hmm"}]}]}}`,
+		``,
+	}, "\n")
+	var out bytes.Buffer
+	if err := Stream(config.ProtocolClaudeMessages, config.ProtocolOpenAIResponses, strings.NewReader(in), &out); err != nil {
+		t.Fatal(err)
+	}
+	s := out.String()
+	if !strings.Contains(s, `"type":"text_delta"`) || !strings.Contains(s, "ok") {
+		t.Fatalf("snapshot text dropped:\n%s", s)
+	}
+	if !strings.Contains(s, `"type":"thinking_delta"`) || !strings.Contains(s, "hmm") {
+		t.Fatalf("snapshot thinking dropped:\n%s", s)
+	}
+	if !strings.Contains(s, "event: message_stop") {
+		t.Fatalf("missing message_stop:\n%s", s)
+	}
+}
+
+func TestStream_ClaudeFromResponses_ErrorJSON(t *testing.T) {
+	in := `{"error":{"message":"quota","type":"insufficient_quota"}}`
+	var out bytes.Buffer
+	if err := Stream(config.ProtocolClaudeMessages, config.ProtocolOpenAIResponses, strings.NewReader(in), &out); err != nil {
+		t.Fatal(err)
+	}
+	s := out.String()
+	if !strings.Contains(s, "event: error") || !strings.Contains(s, "quota") {
+		t.Fatalf("want Claude error SSE, got\n%s", s)
+	}
+	if strings.Contains(s, "event: message_start") {
+		t.Fatalf("error became success stream:\n%s", s)
+	}
+}
+
+func TestStream_ClaudeFromResponses_ReasoningItemAdded(t *testing.T) {
+	pr, pw := io.Pipe()
+	t.Cleanup(func() { _ = pw.Close() })
+	out := &syncBuf{}
+	done := make(chan error, 1)
+	go func() {
+		done <- Stream(config.ProtocolClaudeMessages, config.ProtocolOpenAIResponses, pr, out)
+	}()
+	if _, err := io.WriteString(pw, `event: response.output_item.added
+data: {"type":"response.output_item.added","item":{"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"hmm"}]}}
+
+`); err != nil {
+		t.Fatal(err)
+	}
+	waitContains(t, out, `"type":"thinking_delta"`)
+	waitContains(t, out, "hmm")
+	if strings.Contains(out.String(), "message_stop") {
+		t.Fatal("emitted message_stop before response.completed")
+	}
+	if _, err := io.WriteString(pw, "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"status\":\"completed\"}}\n\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := pw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stream did not return after response.completed")
 	}
 }
 

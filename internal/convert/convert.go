@@ -86,6 +86,9 @@ func Stream(client, upstream config.Protocol, r io.Reader, w io.Writer) error {
 	if client == config.ProtocolClaudeMessages && upstream == config.ProtocolOpenAIChat {
 		return OpenAIChatStreamToClaude(r, w)
 	}
+	if client == config.ProtocolClaudeMessages && upstream == config.ProtocolOpenAIResponses {
+		return ResponsesStreamToClaude(r, w)
+	}
 	if client == config.ProtocolOpenAIResponses && upstream == config.ProtocolOpenAIChat {
 		return OpenAIChatStreamToResponses(r, w)
 	}

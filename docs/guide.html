@@ -116,7 +116,7 @@
   <pre><code>export ANTHROPIC_BASE_URL=http://127.0.0.1:9999/deepseek
 export ANTHROPIC_API_KEY=dummy
 claude</code></pre>
-  <p>Claude Code 会打 <code>/v1/messages</code>。上游无论是 Chat、Responses 还是 Gemini，caosi 都会转成对应协议。</p>
+  <p>Claude Code 会打 <code>/v1/messages</code>。上游无论是 Chat、Responses 还是 Gemini，caosi 都会转成对应协议。上游是 OpenAI Responses 时，文本、thinking、tool_use 随上游 SSE 边到边转成 Claude 事件，不必等整段结束。</p>
 
   <h3>OpenAI SDK / Chat Completions 客户端</h3>
   <pre><code>export OPENAI_BASE_URL=http://127.0.0.1:9999/deepseek/v1
@@ -131,7 +131,7 @@ export OPENAI_API_KEY=dummy</code></pre>
   <h2>这一版能做什么</h2>
   <ul>
     <li class="ok">同协议透传（body 不改，除非配了 model）</li>
-    <li class="ok">OpenAI Chat、OpenAI Responses、Claude Messages、Gemini 之间互相转换（含流式）</li>
+    <li class="ok">OpenAI Chat、OpenAI Responses、Claude Messages、Gemini 之间互相转换（含流式；Claude Code → Responses 上游为边到边）</li>
     <li class="ok">文本、system、tools、thinking/reasoning、消息里的图片块按 Conversion Contract 映射</li>
     <li class="ok">改 <code>providers.jsonc</code> 会热加载；坏文件保留上一份可用配置</li>
     <li class="ok">注入 api_key / headers，丢掉客户端自带的密钥头</li>
