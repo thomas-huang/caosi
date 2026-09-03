@@ -4,6 +4,13 @@
 
 **给试用者的说明（请打开这一页）：** [docs/guide.html](docs/guide.html)
 
+## 安装
+
+```bash
+go install github.com/thomas-huang/caosi/cmd/caosi@latest
+caosi --version
+```
+
 ## 运行
 
 ```bash
@@ -15,6 +22,7 @@ go build -o caosi ./cmd/caosi
 
 ```bash
 ./caosi --help
+./caosi --version
 ./caosi --port 9999 --config-dir ~/.caosi
 curl -s http://127.0.0.1:9999/health
 ```

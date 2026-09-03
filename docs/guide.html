@@ -157,7 +157,9 @@ export OPENAI_API_KEY=dummy</code></pre>
   </div>
 
   <h2>常用命令</h2>
-  <pre><code>./caosi --help
+  <pre><code>go install github.com/thomas-huang/caosi/cmd/caosi@latest
+caosi --version
+./caosi --help
 ./caosi --port 9999 --config-dir ~/.caosi --log-level info</code></pre>
   <p>日志打在 stderr，一行一条，不含请求/响应 body。</p>
 

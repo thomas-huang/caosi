@@ -3,7 +3,7 @@ package protocol
 import (
 	"strings"
 
-	"caosi/internal/config"
+	"github.com/thomas-huang/caosi/internal/config"
 )
 
 // Detect infers the Client Protocol from the path after the Provider Name.

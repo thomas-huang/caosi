@@ -3,7 +3,7 @@ package protocol
 import (
 	"testing"
 
-	"caosi/internal/config"
+	"github.com/thomas-huang/caosi/internal/config"
 )
 
 func TestDetect(t *testing.T) {

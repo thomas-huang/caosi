@@ -10,17 +10,21 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"syscall"
 	"time"
 
-	"caosi/internal/config"
-	"caosi/internal/server"
+	"github.com/thomas-huang/caosi/internal/config"
+	"github.com/thomas-huang/caosi/internal/server"
 )
 
 const defaultPort = 9999
 const defaultListen = "127.0.0.1"
+
+// Version is overridden at link time. Otherwise go install's module version or "dev".
+var Version = "dev"
 
 // Main is the testable CLI entry. args[0] is the program name.
 func Main(args []string, stdout, stderr io.Writer) int {
@@ -51,12 +55,17 @@ func MainContext(ctx context.Context, args []string, stdout, stderr io.Writer) i
 	port := fs.Int("port", defaultPort, "监听端口（默认: 9999）")
 	listen := fs.String("listen", defaultListen, "只允许 loopback：127.0.0.1 或 ::1")
 	logLevel := fs.String("log-level", "info", "debug|info|warn|error")
+	showVersion := fs.Bool("version", false, "打印版本并退出")
 
 	if err := fs.Parse(rest); err != nil {
 		if err == flag.ErrHelp {
 			return 0
 		}
 		return 2
+	}
+	if *showVersion {
+		fmt.Fprintln(stdout, versionString())
+		return 0
 	}
 	if fs.NArg() > 0 {
 		fmt.Fprintf(stderr, "caosi: 不认识多余参数 %q\n\n", strings.Join(fs.Args(), " "))
@@ -141,11 +150,30 @@ func writeHelp(w io.Writer) {
   --port        端口（默认: 9999）
   --listen      只允许 127.0.0.1 或 ::1（默认: 127.0.0.1）
   --log-level   debug|info|warn|error（默认: info）
+  --version     打印版本并退出（不需要配置文件）
   -h, --help    显示帮助
+
+安装:
+  go install github.com/thomas-huang/caosi/cmd/caosi@latest
 
 第一次运行会在配置目录写下 providers.jsonc 样例，填好密钥后再启动。
 说明: 打开仓库中的 docs/guide.html
 `)
+}
+
+func versionString() string {
+	if v := strings.TrimSpace(Version); v != "" && v != "dev" {
+		return v
+	}
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		if v := strings.TrimSpace(bi.Main.Version); v != "" && v != "(devel)" {
+			return v
+		}
+	}
+	if v := strings.TrimSpace(Version); v != "" {
+		return v
+	}
+	return "dev"
 }
 
 func writeFirstRun(w io.Writer, path, dir string, customDir bool) {

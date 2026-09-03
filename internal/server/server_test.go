@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"caosi/internal/config"
+	"github.com/thomas-huang/caosi/internal/config"
 )
 
 func testServer(t *testing.T, protocol config.Protocol, handler http.HandlerFunc) (*Server, *httptest.Server) {

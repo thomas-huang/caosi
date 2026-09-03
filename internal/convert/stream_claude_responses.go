@@ -7,7 +7,7 @@ import (
 	"io"
 	"strings"
 
-	"caosi/internal/config"
+	"github.com/thomas-huang/caosi/internal/config"
 )
 
 // ResponsesStreamToClaude converts OpenAI Responses SSE into Claude Messages SSE

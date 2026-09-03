@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"caosi/internal/config"
+	"github.com/thomas-huang/caosi/internal/config"
 )
 
 func TestClaudeToOpenAIChat_TextAndSystem(t *testing.T) {

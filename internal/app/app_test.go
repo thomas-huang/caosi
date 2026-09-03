@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"caosi/internal/config"
+	"github.com/thomas-huang/caosi/internal/config"
 )
 
 func TestHelpMentionsFlags(t *testing.T) {
@@ -19,6 +19,24 @@ func TestHelpMentionsFlags(t *testing.T) {
 	s := stderr.String()
 	if !strings.Contains(s, "--port") || !strings.Contains(s, "--config-dir") {
 		t.Fatalf("help missing flags:\n%s", s)
+	}
+	if !strings.Contains(s, "--version") {
+		t.Fatalf("help missing --version:\n%s", s)
+	}
+	if !strings.Contains(s, "github.com/thomas-huang/caosi") {
+		t.Fatalf("help missing install path:\n%s", s)
+	}
+}
+
+func TestVersion_NoConfig(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Main([]string{"caosi", "--version"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit %d stderr=%s", code, stderr.String())
+	}
+	v := strings.TrimSpace(stdout.String())
+	if v == "" {
+		t.Fatalf("empty version; stderr=%s", stderr.String())
 	}
 }
 

@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"caosi/internal/app"
+	"github.com/thomas-huang/caosi/internal/app"
 )
 
 func main() {

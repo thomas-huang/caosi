@@ -14,10 +14,10 @@ import (
 	"sync"
 	"time"
 
-	"caosi/internal/config"
-	"caosi/internal/convert"
-	"caosi/internal/header"
-	"caosi/internal/protocol"
+	"github.com/thomas-huang/caosi/internal/config"
+	"github.com/thomas-huang/caosi/internal/convert"
+	"github.com/thomas-huang/caosi/internal/header"
+	"github.com/thomas-huang/caosi/internal/protocol"
 )
 
 const maxBody = 32 << 20

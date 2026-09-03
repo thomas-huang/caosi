@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"caosi/internal/config"
+	"github.com/thomas-huang/caosi/internal/config"
 )
 
 func TestApply_StripsClientCredsAndInjectsBearer(t *testing.T) {

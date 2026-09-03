@@ -7,7 +7,7 @@ import (
 	"io"
 	"strings"
 
-	"caosi/internal/config"
+	"github.com/thomas-huang/caosi/internal/config"
 )
 
 func Supported(client, upstream config.Protocol) bool {

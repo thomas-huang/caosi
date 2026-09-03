@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"caosi/internal/config"
+	"github.com/thomas-huang/caosi/internal/config"
 )
 
 type claudeReq struct {

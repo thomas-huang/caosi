@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"caosi/internal/config"
+	"github.com/thomas-huang/caosi/internal/config"
 )
 
 func TestOpenAIChatStreamToClaude_TextChunks(t *testing.T) {

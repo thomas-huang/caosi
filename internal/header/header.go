@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"strings"
 
-	"caosi/internal/config"
+	"github.com/thomas-huang/caosi/internal/config"
 )
 
 var hopByHop = []string{
