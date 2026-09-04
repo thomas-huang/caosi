@@ -312,6 +312,147 @@ data: {"type":"response.output_item.added","item":{"id":"rs_1","type":"reasoning
 	}
 }
 
+func TestStream_ChatToGemini_EmitsGeminiJSON(t *testing.T) {
+	in := strings.Join([]string{
+		`data: {"id":"chatcmpl-1","choices":[{"delta":{"reasoning_content":"hmm"}}]}`,
+		``,
+		`data: {"choices":[{"delta":{"content":"hel"}}]}`,
+		``,
+		`data: {"choices":[{"delta":{"content":"lo"},"finish_reason":"stop"}]}`,
+		``,
+		`data: [DONE]`,
+		``,
+	}, "\n")
+	var out bytes.Buffer
+	if err := Stream(config.ProtocolGemini, config.ProtocolOpenAIChat, strings.NewReader(in), &out); err != nil {
+		t.Fatal(err)
+	}
+	s := out.String()
+	if !strings.Contains(s, `"candidates"`) || !strings.Contains(s, "hello") {
+		t.Fatalf("want Gemini stream JSON, got\n%s", s)
+	}
+	if !strings.Contains(s, "hmm") {
+		t.Fatalf("thinking dropped:\n%s", s)
+	}
+	if strings.Contains(s, `"choices"`) {
+		t.Fatalf("Chat schema leaked to Gemini client:\n%s", s)
+	}
+}
+
+func TestStream_ResponsesOneShotSSE_FromClaudeJSON(t *testing.T) {
+	in := `{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"text","text":"pong"}],"stop_reason":"end_turn"}`
+	var out bytes.Buffer
+	if err := Stream(config.ProtocolOpenAIResponses, config.ProtocolClaudeMessages, strings.NewReader(in), &out); err != nil {
+		t.Fatal(err)
+	}
+	s := out.String()
+	if !strings.Contains(s, "event: response.completed") {
+		t.Fatalf("want one-shot Responses SSE, got\n%s", s)
+	}
+	if !strings.Contains(s, `"object":"response"`) || !strings.Contains(s, "pong") {
+		t.Fatalf("want Responses body, got\n%s", s)
+	}
+	if strings.Contains(s, `"choices"`) || strings.Contains(s, `"type":"message"`) && !strings.Contains(s, `"object":"response"`) {
+		t.Fatalf("upstream schema leaked:\n%s", s)
+	}
+}
+
+func TestStream_ResponsesOneShotSSE_FromGeminiJSON(t *testing.T) {
+	in := `{"candidates":[{"content":{"role":"model","parts":[{"text":"pong"}]},"finishReason":"STOP"}]}`
+	var out bytes.Buffer
+	if err := Stream(config.ProtocolOpenAIResponses, config.ProtocolGemini, strings.NewReader(in), &out); err != nil {
+		t.Fatal(err)
+	}
+	s := out.String()
+	if !strings.Contains(s, "event: response.completed") || !strings.Contains(s, "pong") {
+		t.Fatalf("want Responses SSE, got\n%s", s)
+	}
+	if strings.Contains(s, `"candidates"`) || strings.Contains(s, `"choices"`) {
+		t.Fatalf("upstream schema leaked:\n%s", s)
+	}
+}
+
+func TestStream_ChatFromResponsesEnvelope(t *testing.T) {
+	in := strings.Join([]string{
+		`event: response.completed`,
+		`data: {"type":"response.completed","response":{"id":"resp_1","object":"response","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"pong"}]}]}}`,
+		``,
+	}, "\n")
+	var out bytes.Buffer
+	if err := Stream(config.ProtocolOpenAIChat, config.ProtocolOpenAIResponses, strings.NewReader(in), &out); err != nil {
+		t.Fatal(err)
+	}
+	s := out.String()
+	if !strings.Contains(s, "data:") || !strings.Contains(s, "[DONE]") {
+		t.Fatalf("want Chat SSE, got\n%s", s)
+	}
+	if !strings.Contains(s, `"choices"`) || !strings.Contains(s, "pong") {
+		t.Fatalf("want Chat chunk, got\n%s", s)
+	}
+	if strings.Contains(s, `"object":"response"`) {
+		t.Fatalf("Responses leaked to Chat client:\n%s", s)
+	}
+}
+
+func TestStream_GeminiFromClaudeJSON(t *testing.T) {
+	in := `{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"text","text":"pong"}],"stop_reason":"end_turn"}`
+	var out bytes.Buffer
+	if err := Stream(config.ProtocolGemini, config.ProtocolClaudeMessages, strings.NewReader(in), &out); err != nil {
+		t.Fatal(err)
+	}
+	s := out.String()
+	if !strings.Contains(s, `"candidates"`) || !strings.Contains(s, "pong") {
+		t.Fatalf("want Gemini JSON, got\n%s", s)
+	}
+	if strings.Contains(s, `"choices"`) || strings.Contains(s, `"type":"message"`) {
+		t.Fatalf("Claude leaked to Gemini client:\n%s", s)
+	}
+}
+
+func TestStream_ChatFromGeminiJSON(t *testing.T) {
+	in := `{"candidates":[{"content":{"role":"model","parts":[{"text":"pong"}]},"finishReason":"STOP"}]}`
+	var out bytes.Buffer
+	if err := Stream(config.ProtocolOpenAIChat, config.ProtocolGemini, strings.NewReader(in), &out); err != nil {
+		t.Fatal(err)
+	}
+	s := out.String()
+	if !strings.Contains(s, `"choices"`) || !strings.Contains(s, "pong") {
+		t.Fatalf("want Chat SSE, got\n%s", s)
+	}
+	if !strings.Contains(s, "data: [DONE]") {
+		t.Fatalf("want Chat SSE terminator:\n%s", s)
+	}
+	if strings.Contains(s, `"candidates"`) {
+		t.Fatalf("Gemini leaked to Chat client:\n%s", s)
+	}
+}
+
+func TestStream_PassthroughCopiesBytes(t *testing.T) {
+	in := "data: raw-upstream\n\n"
+	var out bytes.Buffer
+	if err := Stream(config.ProtocolOpenAIChat, config.ProtocolOpenAIChat, strings.NewReader(in), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.String() != in {
+		t.Fatalf("passthrough mutated stream: %q", out.String())
+	}
+}
+
+func TestStream_ClaudeFromGeminiJSON_LegalSSE(t *testing.T) {
+	in := `{"candidates":[{"content":{"role":"model","parts":[{"thought":true,"text":"hmm"},{"text":"pong"}]},"finishReason":"STOP"}]}`
+	var out bytes.Buffer
+	if err := Stream(config.ProtocolClaudeMessages, config.ProtocolGemini, strings.NewReader(in), &out); err != nil {
+		t.Fatal(err)
+	}
+	s := out.String()
+	if !strings.Contains(s, "event: content_block_delta") || !strings.Contains(s, "pong") {
+		t.Fatalf("want Claude SSE, got\n%s", s)
+	}
+	if strings.Contains(s, `"candidates"`) {
+		t.Fatalf("Gemini leaked:\n%s", s)
+	}
+}
+
 func TestOpenAIChatStreamToResponses_IncludesReasoning(t *testing.T) {
 	in := strings.Join([]string{
 		`data: {"id":"chatcmpl-1","choices":[{"delta":{"reasoning_content":"think"}}]}`,

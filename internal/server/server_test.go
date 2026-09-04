@@ -80,6 +80,56 @@ func TestLogsDoNotIncludeBodies(t *testing.T) {
 	}
 }
 
+func TestRootPath_NotFound(t *testing.T) {
+	s, _ := testServer(t, config.ProtocolOpenAIChat, func(w http.ResponseWriter, r *http.Request) {})
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rr.Code != 404 {
+		t.Fatalf("status %d %s", rr.Code, rr.Body.Bytes())
+	}
+	if !strings.Contains(rr.Body.String(), "缺少 Provider Name") {
+		t.Fatalf("want usage hint, got %s", rr.Body.Bytes())
+	}
+}
+
+func TestUnknownClientPath(t *testing.T) {
+	s, _ := testServer(t, config.ProtocolOpenAIChat, func(w http.ResponseWriter, r *http.Request) {})
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/ds/v1/unknown", strings.NewReader(`{}`)))
+	if rr.Code != 404 {
+		t.Fatalf("status %d %s", rr.Code, rr.Body.Bytes())
+	}
+	if !strings.Contains(rr.Body.String(), "认不出客户端协议") {
+		t.Fatalf("want protocol hint, got %s", rr.Body.Bytes())
+	}
+}
+
+func TestHealth_NonGET(t *testing.T) {
+	s, _ := testServer(t, config.ProtocolOpenAIChat, func(w http.ResponseWriter, r *http.Request) {})
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/health", nil))
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status %d %s", rr.Code, rr.Body.Bytes())
+	}
+}
+
+func TestUpstreamConnectFailure(t *testing.T) {
+	file := &config.File{Providers: map[string]*config.Provider{
+		"ds": {Name: "ds", BaseURL: "http://127.0.0.1:1", Protocol: config.ProtocolOpenAIChat, APIKey: "sk-real"},
+	}}
+	s := New(file, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	req := httptest.NewRequest(http.MethodPost, "/ds/v1/chat/completions", strings.NewReader(`{"model":"x","messages":[]}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadGateway {
+		t.Fatalf("status %d %s", rr.Code, rr.Body.Bytes())
+	}
+	if !strings.Contains(rr.Body.String(), "上游连接失败") {
+		t.Fatalf("want connect failure, got %s", rr.Body.Bytes())
+	}
+}
+
 func TestUnknownProvider(t *testing.T) {
 	s, _ := testServer(t, config.ProtocolOpenAIChat, func(w http.ResponseWriter, r *http.Request) {})
 	rr := httptest.NewRecorder()
