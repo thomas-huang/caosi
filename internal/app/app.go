@@ -154,10 +154,11 @@ func writeHelp(w io.Writer) {
   -h, --help    显示帮助
 
 安装:
+  npm install -g caosi
   go install github.com/thomas-huang/caosi/cmd/caosi@latest
 
 第一次运行会在配置目录写下 providers.jsonc 样例，填好密钥后再启动。
-说明: 打开仓库中的 docs/guide.html
+说明: https://github.com/thomas-huang/caosi
 `)
 }
 
@@ -188,7 +189,7 @@ func writeFirstRun(w io.Writer, path, dir string, customDir bool) {
 下一步:
   1. 打开这个文件，填入 api_key；Claude Code 用 OpenAI 兼容上游时请保留 model
   2. 再运行: %s
-  3. 用浏览器打开仓库里的 docs/guide.html
+  3. 把客户端 Base URL 设成 http://127.0.0.1:9999/{provider_name}（说明见仓库 README）
 
 现在不会开始监听，避免空配置让人以为已经可用。
 `, path, rerun)
@@ -222,7 +223,7 @@ func printReady(w io.Writer, addr string, file *config.File) {
 providers: %s
 
 把客户端 Base URL 设成 http://%s/{provider_name}
-说明: 仓库中的 docs/guide.html
+说明: https://github.com/thomas-huang/caosi
 `, host, b.String(), host)
 }
 

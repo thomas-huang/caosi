@@ -47,6 +47,12 @@ func TestHelpMentionsFlags(t *testing.T) {
 	if !strings.Contains(s, "github.com/thomas-huang/caosi") {
 		t.Fatalf("help missing install path:\n%s", s)
 	}
+	if !strings.Contains(s, "npm install -g caosi") {
+		t.Fatalf("help missing npm install:\n%s", s)
+	}
+	if strings.Contains(s, "guide.html") {
+		t.Fatalf("help must not point at guide.html:\n%s", s)
+	}
 }
 
 func TestVersion_NoConfig(t *testing.T) {
@@ -84,6 +90,9 @@ func TestFirstRun_WritesSampleAndExits(t *testing.T) {
 	}
 	if !strings.Contains(out, path) {
 		t.Fatalf("message should include wrote path:\n%s", out)
+	}
+	if strings.Contains(out, "guide.html") {
+		t.Fatalf("first-run must not point at guide.html:\n%s", out)
 	}
 }
 

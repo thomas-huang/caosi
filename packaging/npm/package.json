@@ -1,0 +1,41 @@
+{
+  "name": "caosi",
+  "version": "0.0.0-dev",
+  "description": "Local converter between LLM client protocols and named upstream providers",
+  "license": "MIT",
+  "homepage": "https://github.com/thomas-huang/caosi",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thomas-huang/caosi.git"
+  },
+  "bugs": {
+    "url": "https://github.com/thomas-huang/caosi/issues"
+  },
+  "bin": {
+    "caosi": "bin/caosi.js"
+  },
+  "files": [
+    "bin/caosi.js",
+    "scripts/postinstall.js",
+    "README.md"
+  ],
+  "scripts": {
+    "postinstall": "node ./scripts/postinstall.js"
+  },
+  "keywords": [
+    "caosi",
+    "llm",
+    "converter",
+    "openai",
+    "claude",
+    "gemini",
+    "anthropic"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

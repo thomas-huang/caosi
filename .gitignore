@@ -4,3 +4,6 @@
 *.out
 .DS_Store
 /tmp/
+/dist/
+packaging/npm/vendor/
+packaging/npm/*.tgz

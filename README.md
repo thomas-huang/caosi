@@ -1,30 +1,110 @@
 # caosi
 
-本机 LLM 协议转换器。Claude Code、Codex、Gemini CLI 打到 `http://127.0.0.1:9999/{provider_name}`，caosi 按 `providers.jsonc` 转到上游。同协议透传；OpenAI Chat / Responses、Claude Messages、Gemini 之间会转换。改配置会热加载。
+[中文](README.zh-CN.md)
 
-**给试用者的说明（请打开这一页）：** [docs/guide.html](docs/guide.html)
+A local converter between LLM client protocols and named upstream providers. Point Claude Code, Codex, or Gemini CLI at `http://127.0.0.1:9999/{provider_name}`. Same protocol is passed through; OpenAI Chat, OpenAI Responses, Claude Messages, and Gemini are converted when they differ.
 
-## 安装
+caosi is a converter, not a gateway.
+
+## Install
 
 ```bash
-go install github.com/thomas-huang/caosi/cmd/caosi@latest
+npm install -g caosi
 caosi --version
 ```
 
-## 运行
+Needs Node.js 18+ on macOS, Linux, or Windows (amd64). The npm package downloads a native binary from GitHub Releases.
+
+## Run
+
+The first start writes a sample Provider File and exits. That is intentional: caosi will not listen on an empty config.
 
 ```bash
-go build -o caosi ./cmd/caosi
-./caosi
+caosi
 ```
 
-第一次运行会在 `~/.caosi/providers.jsonc` 写下带注释的样例，然后退出。填好 `api_key`（Claude Code 打 OpenAI 兼容上游时保留 `model`）后再运行一次。
+Edit `~/.caosi/providers.jsonc`. Set `api_key` and `base_url`. If Claude Code will talk to an OpenAI-compatible upstream, keep `model` (for example `deepseek-chat`) so the upstream does not see `claude-*`.
+
+Start again:
 
 ```bash
-./caosi --help
-./caosi --version
-./caosi --port 9999 --config-dir ~/.caosi
+caosi
 curl -s http://127.0.0.1:9999/health
 ```
 
-只监听 loopback。领域用语见 [CONTEXT.md](CONTEXT.md)，决定见 [docs/adr](docs/adr)。
+## Point Claude Code at it
+
+```bash
+export ANTHROPIC_BASE_URL=http://127.0.0.1:9999/deepseek
+export ANTHROPIC_API_KEY=dummy
+claude
+```
+
+Replace `deepseek` with your Provider Name. caosi ignores the client key and uses the Provider's `api_key`. Claude Code sends `/v1/messages`; caosi converts when the upstream is not Claude.
+
+## Codex / OpenAI and Gemini CLI
+
+OpenAI SDK, Chat Completions, and Codex:
+
+```bash
+export OPENAI_BASE_URL=http://127.0.0.1:9999/deepseek/v1
+export OPENAI_API_KEY=dummy
+```
+
+Gemini CLI (`~/.gemini/.env` or the environment):
+
+```bash
+export GEMINI_API_BASE=http://127.0.0.1:9999/deepseek
+```
+
+## Provider File
+
+`~/.caosi/providers.jsonc` is JSONC keyed by Provider Name (the first URL path segment). `health` is reserved.
+
+```jsonc
+{
+  "deepseek": {
+    "base_url": "https://api.deepseek.com",
+    "protocol": "openai_chat",
+    "api_key": "sk-...",
+    "model": "deepseek-chat"
+  }
+}
+```
+
+| `protocol` | Upstream wire protocol |
+|---|---|
+| `openai_chat` | OpenAI Chat Completions |
+| `openai_responses` | OpenAI Responses |
+| `claude_messages` | Claude Messages |
+| `gemini` | Gemini generateContent |
+
+- `model` is optional: when set, it replaces the client's model name on the upstream request.
+- `headers` is optional extra request headers (for example OpenRouter).
+- `base_url` is a prefix. caosi does not strip `/v1`. Use the root the upstream actually expects (`https://api.deepseek.com`, not `https://api.deepseek.com/v1`).
+
+## Listen, health, reload
+
+- Loopback only: `127.0.0.1` (or `::1` via `--listen`). Default port `9999` (`--port`).
+- `GET /health`
+- Saving `providers.jsonc` hot-reloads; a bad file keeps the last good config.
+- Flags: `--config-dir`, `--port`, `--listen`, `--log-level`, `--version`.
+
+## What it does not do
+
+No Web UI, OAuth, failover, key pools, or rewriting your Claude Code / Codex / Gemini config files.
+
+## Without Node.js
+
+Download the binary for your OS from [GitHub Releases](https://github.com/thomas-huang/caosi/releases), rename it to `caosi` (or `caosi.exe` on Windows), and put it on your `PATH`. Checksums are in `checksums.txt` on each release.
+
+## Contributors
+
+```bash
+go install github.com/thomas-huang/caosi/cmd/caosi@latest
+go test ./...
+```
+
+Domain language: [CONTEXT.md](CONTEXT.md). Decisions: [docs/adr](docs/adr).
+
+To cut a release, push a tag `vX.Y.Z` (first public: `v0.1.0`). GitHub Actions builds the five binaries, writes checksums, creates the Release, and publishes `caosi` to npm with GitHub OIDC trusted publishing (no access token). On npmjs.com, add a GitHub Actions trusted publisher for package `caosi`: repository `thomas-huang/caosi`, workflow filename `release.yml`.
