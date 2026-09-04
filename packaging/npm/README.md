@@ -3,7 +3,7 @@
 Local converter between LLM client protocols and named upstream providers.
 
 ```bash
-npm install -g caosi
+npm install -g @thomas-huang/caosi
 caosi --version
 ```
 

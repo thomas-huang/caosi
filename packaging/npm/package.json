@@ -1,5 +1,5 @@
 {
-  "name": "caosi",
+  "name": "@thomas-huang/caosi",
   "version": "0.0.0-dev",
   "description": "Local converter between LLM client protocols and named upstream providers",
   "license": "MIT",

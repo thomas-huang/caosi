@@ -9,7 +9,7 @@ const binaryPath = path.join(__dirname, "..", "vendor", binaryName);
 
 if (!fs.existsSync(binaryPath)) {
   console.error(
-    "caosi: bundled binary is missing. Reinstall with `npm install -g caosi` after a GitHub Release exists, or run `npm rebuild caosi`."
+    "caosi: bundled binary is missing. Reinstall with `npm install -g @thomas-huang/caosi` after a GitHub Release exists, or run `npm rebuild @thomas-huang/caosi`."
   );
   process.exit(1);
 }

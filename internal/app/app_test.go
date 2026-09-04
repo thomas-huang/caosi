@@ -47,7 +47,7 @@ func TestHelpMentionsFlags(t *testing.T) {
 	if !strings.Contains(s, "github.com/thomas-huang/caosi") {
 		t.Fatalf("help missing install path:\n%s", s)
 	}
-	if !strings.Contains(s, "npm install -g caosi") {
+	if !strings.Contains(s, "npm install -g @thomas-huang/caosi") {
 		t.Fatalf("help missing npm install:\n%s", s)
 	}
 	if strings.Contains(s, "guide.html") {

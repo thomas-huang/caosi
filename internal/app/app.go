@@ -154,7 +154,7 @@ func writeHelp(w io.Writer) {
   -h, --help    显示帮助
 
 安装:
-  npm install -g caosi
+  npm install -g @thomas-huang/caosi
   go install github.com/thomas-huang/caosi/cmd/caosi@latest
 
 第一次运行会在配置目录写下 providers.jsonc 样例，填好密钥后再启动。

@@ -9,7 +9,7 @@ caosi 是 Converter，不是网关。
 ## 安装
 
 ```bash
-npm install -g caosi
+npm install -g @thomas-huang/caosi
 caosi --version
 ```
 
@@ -107,4 +107,4 @@ go test ./...
 
 领域用语：[CONTEXT.md](CONTEXT.md)。决定：[docs/adr](docs/adr)。
 
-发版：推 tag `vX.Y.Z`（第一次公开用 `v0.1.0`）。GitHub Actions 会编五个二进制、写 checksum、建 Release，并用 GitHub OIDC Trusted Publishing 把 `caosi` 发到 npm（不用 access token）。在 npmjs.com 上为包 `caosi` 添加 GitHub Actions trusted publisher：仓库 `thomas-huang/caosi`，workflow 文件名 `release.yml`。
+发版：推 tag `vX.Y.Z`（第一次公开用 `v0.1.0`）。GitHub Actions 会编五个二进制、写 checksum、建 Release，并用 GitHub OIDC Trusted Publishing 把 `@thomas-huang/caosi` 发到 npm（不用 access token）。在 npmjs.com 上为包 `@thomas-huang/caosi` 添加 GitHub Actions trusted publisher：仓库 `thomas-huang/caosi`，workflow 文件名 `release.yml`。

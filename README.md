@@ -9,7 +9,7 @@ caosi is a converter, not a gateway.
 ## Install
 
 ```bash
-npm install -g caosi
+npm install -g @thomas-huang/caosi
 caosi --version
 ```
 
@@ -107,4 +107,4 @@ go test ./...
 
 Domain language: [CONTEXT.md](CONTEXT.md). Decisions: [docs/adr](docs/adr).
 
-To cut a release, push a tag `vX.Y.Z` (first public: `v0.1.0`). GitHub Actions builds the five binaries, writes checksums, creates the Release, and publishes `caosi` to npm with GitHub OIDC trusted publishing (no access token). On npmjs.com, add a GitHub Actions trusted publisher for package `caosi`: repository `thomas-huang/caosi`, workflow filename `release.yml`.
+To cut a release, push a tag `vX.Y.Z` (first public: `v0.1.0`). GitHub Actions builds the five binaries, writes checksums, creates the Release, and publishes `@thomas-huang/caosi` to npm with GitHub OIDC trusted publishing (no access token). On npmjs.com, add a GitHub Actions trusted publisher for package `@thomas-huang/caosi`: repository `thomas-huang/caosi`, workflow filename `release.yml`.
