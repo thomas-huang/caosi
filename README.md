@@ -107,4 +107,14 @@ go test ./...
 
 Domain language: [CONTEXT.md](CONTEXT.md). Decisions: [docs/adr](docs/adr).
 
-To cut a release, push a tag `vX.Y.Z` (first public: `v0.1.0`). GitHub Actions builds the five binaries, writes checksums, creates the Release, and publishes `@thomas-huang/caosi` to npm with GitHub OIDC trusted publishing (no access token). On npmjs.com, add a GitHub Actions trusted publisher for package `@thomas-huang/caosi`: repository `thomas-huang/caosi`, workflow filename `release.yml`.
+To cut a release, push a tag `vX.Y.Z`. GitHub Actions builds the five binaries, writes checksums, creates the Release, and publishes `@thomas-huang/caosi` to npm with GitHub OIDC trusted publishing (no access token).
+
+On npmjs.com, open package `@thomas-huang/caosi` → Trusted Publisher and set **exactly**:
+
+- Publisher: GitHub Actions
+- Organization or user: `thomas-huang`
+- Repository: `caosi` (not `thomas-huang/caosi`)
+- Workflow filename: `release.yml` (filename only, not `release` and not `.github/workflows/release.yml`)
+- Environment: leave empty (this workflow does not set `environment:`)
+
+`OIDC permission denied for this action` means the token was issued but those fields did not match. Provenance can still succeed; the PUT to the registry is what npm authorizes.

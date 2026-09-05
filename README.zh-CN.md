@@ -107,4 +107,14 @@ go test ./...
 
 领域用语：[CONTEXT.md](CONTEXT.md)。决定：[docs/adr](docs/adr)。
 
-发版：推 tag `vX.Y.Z`（第一次公开用 `v0.1.0`）。GitHub Actions 会编五个二进制、写 checksum、建 Release，并用 GitHub OIDC Trusted Publishing 把 `@thomas-huang/caosi` 发到 npm（不用 access token）。在 npmjs.com 上为包 `@thomas-huang/caosi` 添加 GitHub Actions trusted publisher：仓库 `thomas-huang/caosi`，workflow 文件名 `release.yml`。
+发版：推 tag `vX.Y.Z`。GitHub Actions 会编五个二进制、写 checksum、建 Release，并用 GitHub OIDC Trusted Publishing 把 `@thomas-huang/caosi` 发到 npm（不用 access token）。
+
+在 npmjs.com 打开包 `@thomas-huang/caosi` → Trusted Publisher，必须和下面**完全一致**：
+
+- Publisher：GitHub Actions
+- Organization or user：`thomas-huang`
+- Repository：`caosi`（不要写成 `thomas-huang/caosi`）
+- Workflow filename：`release.yml`（只要文件名，不要填 `release`，也不要填 `.github/workflows/release.yml`）
+- Environment：留空（workflow 没有 `environment:`）
+
+`OIDC permission denied for this action` 表示 OIDC 令牌已经签发，但上面几项和这次 Actions 对不上。Provenance 仍可能成功；npm 拦的是 PUT 包。
