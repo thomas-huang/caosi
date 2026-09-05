@@ -33,7 +33,7 @@ caosi --version
 caosi
 ```
 
-编辑 `~/.caosi/providers.jsonc`，填入 `api_key` 和 `base_url`。若 Claude Code 要打 OpenAI 兼容上游，请保留 `model`（例如 `deepseek-chat`），否则上游会看到 `claude-*`。
+编辑 `~/.caosi/providers.jsonc`，填入 `api_key` 和 `base_url`。若 Claude Code 要打 OpenAI 兼容上游，请保留 `model`（例如 `qwen/qwen3-coder`），否则上游会看到 `claude-*`。
 
 再启动：
 
@@ -45,26 +45,26 @@ curl -s http://127.0.0.1:9999/health
 ## 把 Claude Code 指过来
 
 ```bash
-export ANTHROPIC_BASE_URL=http://127.0.0.1:9999/deepseek
+export ANTHROPIC_BASE_URL=http://127.0.0.1:9999/openrouter
 export ANTHROPIC_API_KEY=dummy
 claude
 ```
 
-把 `deepseek` 换成你的 Provider Name。caosi 不用客户端带来的密钥，只用 Provider 里的 `api_key`。Claude Code 会打 `/v1/messages`；上游不是 Claude 时会转换。
+把 `openrouter` 换成你的 Provider Name。caosi 不用客户端带来的密钥，只用 Provider 里的 `api_key`。Claude Code 会打 `/v1/messages`；上游不是 Claude 时会转换。
 
 ## Codex / OpenAI 与 Gemini CLI
 
 OpenAI SDK、Chat Completions、Codex：
 
 ```bash
-export OPENAI_BASE_URL=http://127.0.0.1:9999/deepseek/v1
+export OPENAI_BASE_URL=http://127.0.0.1:9999/openrouter/v1
 export OPENAI_API_KEY=dummy
 ```
 
 Gemini CLI（`~/.gemini/.env` 或环境变量）：
 
 ```bash
-export GEMINI_API_BASE=http://127.0.0.1:9999/deepseek
+export GEMINI_API_BASE=http://127.0.0.1:9999/openrouter
 ```
 
 ## Provider 文件
@@ -73,11 +73,11 @@ export GEMINI_API_BASE=http://127.0.0.1:9999/deepseek
 
 ```jsonc
 {
-  "deepseek": {
-    "base_url": "https://api.deepseek.com",
+  "openrouter": {
+    "base_url": "https://openrouter.ai/api",
     "protocol": "openai_chat",
     "api_key": "sk-...",
-    "model": "deepseek-chat"
+    "model": "qwen/qwen3-coder"
   }
 }
 ```
@@ -91,7 +91,7 @@ export GEMINI_API_BASE=http://127.0.0.1:9999/deepseek
 
 - `model` 可选：填了就改写客户端带来的模型名。
 - `headers` 可选，用来补 OpenRouter 之类的额外头。
-- `base_url` 是前缀。caosi 不会剥 `/v1`。写成上游真正要接的根（`https://api.deepseek.com`，不要写成 `https://api.deepseek.com/v1`）。
+- `base_url` 是前缀。caosi 不会剥 `/v1`。写成上游真正要接的根（`https://openrouter.ai/api`，不要写成 `https://openrouter.ai/api/v1`）。
 
 ## 监听、健康检查、热加载
 

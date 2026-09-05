@@ -33,7 +33,7 @@ The first start writes a sample Provider File and exits. That is intentional: ca
 caosi
 ```
 
-Edit `~/.caosi/providers.jsonc`. Set `api_key` and `base_url`. If Claude Code will talk to an OpenAI-compatible upstream, keep `model` (for example `deepseek-chat`) so the upstream does not see `claude-*`.
+Edit `~/.caosi/providers.jsonc`. Set `api_key` and `base_url`. If Claude Code will talk to an OpenAI-compatible upstream, keep `model` (for example `qwen/qwen3-coder`) so the upstream does not see `claude-*`.
 
 Start again:
 
@@ -45,26 +45,26 @@ curl -s http://127.0.0.1:9999/health
 ## Point Claude Code at it
 
 ```bash
-export ANTHROPIC_BASE_URL=http://127.0.0.1:9999/deepseek
+export ANTHROPIC_BASE_URL=http://127.0.0.1:9999/openrouter
 export ANTHROPIC_API_KEY=dummy
 claude
 ```
 
-Replace `deepseek` with your Provider Name. caosi ignores the client key and uses the Provider's `api_key`. Claude Code sends `/v1/messages`; caosi converts when the upstream is not Claude.
+Replace `openrouter` with your Provider Name. caosi ignores the client key and uses the Provider's `api_key`. Claude Code sends `/v1/messages`; caosi converts when the upstream is not Claude.
 
 ## Codex / OpenAI and Gemini CLI
 
 OpenAI SDK, Chat Completions, and Codex:
 
 ```bash
-export OPENAI_BASE_URL=http://127.0.0.1:9999/deepseek/v1
+export OPENAI_BASE_URL=http://127.0.0.1:9999/openrouter/v1
 export OPENAI_API_KEY=dummy
 ```
 
 Gemini CLI (`~/.gemini/.env` or the environment):
 
 ```bash
-export GEMINI_API_BASE=http://127.0.0.1:9999/deepseek
+export GEMINI_API_BASE=http://127.0.0.1:9999/openrouter
 ```
 
 ## Provider File
@@ -73,11 +73,11 @@ export GEMINI_API_BASE=http://127.0.0.1:9999/deepseek
 
 ```jsonc
 {
-  "deepseek": {
-    "base_url": "https://api.deepseek.com",
+  "openrouter": {
+    "base_url": "https://openrouter.ai/api",
     "protocol": "openai_chat",
     "api_key": "sk-...",
-    "model": "deepseek-chat"
+    "model": "qwen/qwen3-coder"
   }
 }
 ```
@@ -91,7 +91,7 @@ export GEMINI_API_BASE=http://127.0.0.1:9999/deepseek
 
 - `model` is optional: when set, it replaces the client's model name on the upstream request.
 - `headers` is optional extra request headers (for example OpenRouter).
-- `base_url` is a prefix. caosi does not strip `/v1`. Use the root the upstream actually expects (`https://api.deepseek.com`, not `https://api.deepseek.com/v1`).
+- `base_url` is a prefix. caosi does not strip `/v1`. Use the root the upstream actually expects (`https://openrouter.ai/api`, not `https://openrouter.ai/api/v1`).
 
 ## Listen, health, reload
 
