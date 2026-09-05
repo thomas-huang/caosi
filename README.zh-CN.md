@@ -2,9 +2,19 @@
 
 [English](README.md)
 
-本机 LLM 协议转换器。把 Claude Code、Codex 或 Gemini CLI 指到 `http://127.0.0.1:9999/{provider_name}`。同协议透传；OpenAI Chat、OpenAI Responses、Claude Messages、Gemini 之间在协议不同时会转换。
+不换 Claude Code、Codex 或 Gemini CLI。把它们指到你自己的上游，不必换客户端。
 
-caosi 是 Converter，不是网关。
+把 Base URL 设成 `http://127.0.0.1:9999/{provider_name}`。协议相同就直通，不同就由 caosi 转。
+
+- 一个静态二进制
+- npm 包自带各平台二进制：安装不跑脚本，也不访问 GitHub
+- macOS、Linux、Windows
+
+```bash
+npm install -g @thomas-huang/caosi
+```
+
+没有 Web UI，没有 OAuth，没有密钥池，也不会改写客户端配置。一个进程，一个文件，只监听本机。
 
 ## 安装
 
@@ -91,6 +101,8 @@ export GEMINI_API_BASE=http://127.0.0.1:9999/deepseek
 - 选项：`--config-dir`、`--port`、`--listen`、`--log-level`、`--version`。
 
 ## 明确不做
+
+caosi 是 Converter，不是网关。
 
 没有 Web UI、OAuth、故障转移、密钥池，也不会改你的 Claude Code / Codex / Gemini 配置文件。
 

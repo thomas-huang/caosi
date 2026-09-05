@@ -2,9 +2,19 @@
 
 [中文](README.zh-CN.md)
 
-A local converter between LLM client protocols and named upstream providers. Point Claude Code, Codex, or Gemini CLI at `http://127.0.0.1:9999/{provider_name}`. Same protocol is passed through; OpenAI Chat, OpenAI Responses, Claude Messages, and Gemini are converted when they differ.
+Keep using Claude Code, Codex, or Gemini CLI. Point them at your own upstream — no client switch.
 
-caosi is a converter, not a gateway.
+Set the Base URL to `http://127.0.0.1:9999/{provider_name}`. Same protocol is passed through; caosi converts when they differ.
+
+- A single static binary
+- npm ships the binaries: no install script, nothing fetched from GitHub
+- macOS, Linux, and Windows
+
+```bash
+npm install -g @thomas-huang/caosi
+```
+
+No Web UI, no OAuth, no key pool, no client-config rewrite. One process, one file, loopback only.
 
 ## Install
 
@@ -91,6 +101,8 @@ export GEMINI_API_BASE=http://127.0.0.1:9999/deepseek
 - Flags: `--config-dir`, `--port`, `--listen`, `--log-level`, `--version`.
 
 ## What it does not do
+
+caosi is a converter, not a gateway.
 
 No Web UI, OAuth, failover, key pools, or rewriting your Claude Code / Codex / Gemini config files.
 
