@@ -53,6 +53,13 @@ jobs:
         run: |
           unset NODE_AUTH_TOKEN
           npm --version
+          mkdir -p vendor
+          cp ../../dist/caosi-darwin-arm64 ../../dist/caosi-darwin-amd64 \
+            ../../dist/caosi-linux-arm64 ../../dist/caosi-linux-amd64 \
+            ../../dist/caosi-windows-amd64.exe vendor/
+          for f in caosi-darwin-arm64 caosi-darwin-amd64 caosi-linux-arm64 caosi-linux-amd64 caosi-windows-amd64.exe; do
+            test -f "vendor/$f"
+          done
           cp ../../README.md README.md
           npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version
           npm publish --access public

@@ -13,7 +13,7 @@ npm install -g @thomas-huang/caosi
 caosi --version
 ```
 
-需要 Node.js 18+，支持 macOS、Linux、Windows amd64。npm 包会从 GitHub Releases 下载对应平台的二进制。
+需要 Node.js 18+，支持 macOS、Linux、Windows amd64。npm 包自带各平台二进制，安装时没有脚本，也不会访问 GitHub。
 
 ## 运行
 

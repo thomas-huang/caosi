@@ -7,4 +7,4 @@ npm install -g @thomas-huang/caosi
 caosi --version
 ```
 
-The npm package downloads a native binary from [GitHub Releases](https://github.com/thomas-huang/caosi/releases). Full usage is in the [repository README](https://github.com/thomas-huang/caosi#readme).
+The npm package includes native binaries for macOS, Linux, and Windows. Full usage is in the [repository README](https://github.com/thomas-huang/caosi#readme).

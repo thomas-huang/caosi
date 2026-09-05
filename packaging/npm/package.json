@@ -16,12 +16,9 @@
   },
   "files": [
     "bin/caosi.js",
-    "scripts/postinstall.js",
+    "vendor/",
     "README.md"
   ],
-  "scripts": {
-    "postinstall": "node ./scripts/postinstall.js"
-  },
   "keywords": [
     "caosi",
     "llm",

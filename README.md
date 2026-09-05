@@ -13,7 +13,7 @@ npm install -g @thomas-huang/caosi
 caosi --version
 ```
 
-Needs Node.js 18+ on macOS, Linux, or Windows (amd64). The npm package downloads a native binary from GitHub Releases.
+Needs Node.js 18+ on macOS, Linux, or Windows (amd64). The npm package includes native binaries; there is no install script and nothing is fetched from GitHub at install time.
 
 ## Run
 
