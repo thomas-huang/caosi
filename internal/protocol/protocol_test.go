@@ -22,6 +22,8 @@ func TestDetect(t *testing.T) {
 		{"/v1beta/models/gemini-pro:streamGenerateContent", config.ProtocolGemini, true},
 		{"/foo", "", false},
 		{"/v1/messages/count_tokens", "", false},
+		{"v1/chat/completions", config.ProtocolOpenAIChat, true},
+		{"foo", "", false},
 	}
 	for _, tc := range cases {
 		got, ok := Detect(tc.path)

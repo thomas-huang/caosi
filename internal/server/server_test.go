@@ -722,3 +722,118 @@ func TestHop_NoAcceptEncoding(t *testing.T) {
 		t.Fatalf("Accept-Encoding=%q", sawAE)
 	}
 }
+
+func TestNew_NilLogAndFileReplace(t *testing.T) {
+	file := &config.File{Providers: map[string]*config.Provider{
+		"ds": {Name: "ds", BaseURL: "http://127.0.0.1:1", Protocol: config.ProtocolOpenAIChat},
+	}}
+	s := New(file, nil)
+	if s.File() != file {
+		t.Fatal("File()")
+	}
+	next := &config.File{Providers: map[string]*config.Provider{
+		"other": {Name: "other"},
+	}}
+	s.ReplaceFile(next)
+	if s.File().Providers["other"] == nil {
+		t.Fatal("ReplaceFile")
+	}
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodHead, "/health", nil))
+	if rr.Code != 200 {
+		t.Fatalf("head health %d", rr.Code)
+	}
+	if rr.Body.Len() != 0 {
+		t.Fatalf("HEAD should have empty body, got %s", rr.Body.Bytes())
+	}
+}
+
+func TestSplitProviderAndWantsStream(t *testing.T) {
+	name, rest := splitProvider("/ds")
+	if name != "ds" || rest != "/" {
+		t.Fatalf("name=%q rest=%q", name, rest)
+	}
+	name, rest = splitProvider("/ds/v1/messages")
+	if name != "ds" || rest != "/v1/messages" {
+		t.Fatalf("name=%q rest=%q", name, rest)
+	}
+	if !wantsStream(nil, "/v1beta/models/x:streamGenerateContent") {
+		t.Fatal("streamGenerateContent")
+	}
+	if wantsStream([]byte(`not-json`), "/v1/messages") {
+		t.Fatal("invalid json")
+	}
+	if !wantsStream([]byte(`{"stream":true}`), "/v1/messages") {
+		t.Fatal("stream true")
+	}
+	if wantsStream([]byte(`{"stream":false}`), "/v1/messages") {
+		t.Fatal("stream false")
+	}
+}
+
+func TestHop_RequestBodyTooLarge(t *testing.T) {
+	old := maxBody
+	maxBody = 16
+	t.Cleanup(func() { maxBody = old })
+	s, _ := testServer(t, config.ProtocolOpenAIChat, func(w http.ResponseWriter, r *http.Request) {})
+	req := httptest.NewRequest(http.MethodPost, "/ds/v1/chat/completions", strings.NewReader(strings.Repeat("a", 32)))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status %d %s", rr.Code, rr.Body.Bytes())
+	}
+	if !strings.Contains(rr.Body.String(), "32MiB") {
+		t.Fatalf("want oversize, got %s", rr.Body.Bytes())
+	}
+}
+
+func TestHop_ConvertRequestError(t *testing.T) {
+	s, _ := testServer(t, config.ProtocolOpenAIChat, func(w http.ResponseWriter, r *http.Request) {})
+	req := httptest.NewRequest(http.MethodPost, "/ds/v1/messages", strings.NewReader(`{`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status %d %s", rr.Code, rr.Body.Bytes())
+	}
+}
+
+func TestHop_ProviderOnlyPath(t *testing.T) {
+	s, _ := testServer(t, config.ProtocolOpenAIChat, func(w http.ResponseWriter, r *http.Request) {})
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/ds", strings.NewReader(`{}`)))
+	if rr.Code != 404 {
+		t.Fatalf("status %d %s", rr.Code, rr.Body.Bytes())
+	}
+}
+
+func TestFlushWriter_Flushes(t *testing.T) {
+	rr := httptest.NewRecorder()
+	fw := &flushWriter{w: rr}
+	n, err := fw.Write([]byte("hi"))
+	if err != nil || n != 2 {
+		t.Fatalf("write %d %v", n, err)
+	}
+	fw.Flush()
+	if rr.Body.String() != "hi" {
+		t.Fatalf("body=%q", rr.Body.String())
+	}
+}
+
+func TestHop_PassthroughSSE(t *testing.T) {
+	s, _ := testServer(t, config.ProtocolOpenAIChat, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: hi\n\n"))
+	})
+	req := httptest.NewRequest(http.MethodPost, "/ds/v1/chat/completions", strings.NewReader(`{"model":"x","stream":true,"messages":[]}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if rr.Code != 200 {
+		t.Fatalf("status %d %s", rr.Code, rr.Body.Bytes())
+	}
+	if !strings.Contains(rr.Body.String(), "data: hi") {
+		t.Fatalf("sse: %s", rr.Body.String())
+	}
+}

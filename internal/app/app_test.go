@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -192,3 +194,166 @@ func TestMainContext_ReadyTextAndPlaceholder(t *testing.T) {
 }
 
 func ioDiscard() *bytes.Buffer { return &bytes.Buffer{} }
+
+func TestMain_NilWritersAndUnknownFlag(t *testing.T) {
+	code := Main([]string{"caosi", "--version"}, nil, nil)
+	if code != 0 {
+		t.Fatalf("nil writers --version exit %d", code)
+	}
+	var stderr bytes.Buffer
+	code = Main([]string{"caosi", "--nope"}, ioDiscard(), &stderr)
+	if code != 2 {
+		t.Fatalf("unknown flag exit %d", code)
+	}
+	if stderr.Len() == 0 {
+		t.Fatal("unknown flag should write to stderr")
+	}
+}
+
+func TestMain_EmptyArgsHelpViaListenRefuse(t *testing.T) {
+	var stderr bytes.Buffer
+	code := Main([]string{"caosi", "--listen", "10.0.0.1"}, ioDiscard(), &stderr)
+	if code != 2 {
+		t.Fatalf("exit %d", code)
+	}
+	if !strings.Contains(stderr.String(), "10.0.0.1") {
+		t.Fatalf("want refused address:\n%s", stderr.String())
+	}
+}
+
+func TestMain_InvalidConfig(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, config.ProviderFileName), []byte(`{`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stderr bytes.Buffer
+	code := Main([]string{"caosi", "--config-dir", dir}, ioDiscard(), &stderr)
+	if code != 1 {
+		t.Fatalf("exit %d", code)
+	}
+	if !strings.Contains(stderr.String(), "配置无效") {
+		t.Fatalf("want invalid config:\n%s", stderr.String())
+	}
+}
+
+func TestMain_ConfigDirIsFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "not-a-dir")
+	if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stderr bytes.Buffer
+	code := Main([]string{"caosi", "--config-dir", path}, ioDiscard(), &stderr)
+	if code != 1 {
+		t.Fatalf("exit %d", code)
+	}
+	if !strings.Contains(stderr.String(), "无法创建配置") {
+		t.Fatalf("want create error:\n%s", stderr.String())
+	}
+}
+
+func TestMain_ListenInUse(t *testing.T) {
+	dir := t.TempDir()
+	raw := `{
+  "ds": {
+    "base_url": "https://api.example.com",
+    "protocol": "openai_chat",
+    "api_key": "sk-real"
+  }
+}`
+	if err := os.WriteFile(filepath.Join(dir, config.ProviderFileName), []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	port := ln.Addr().(*net.TCPAddr).Port
+	var stderr bytes.Buffer
+	code := Main([]string{"caosi", "--config-dir", dir, "--port", strconv.Itoa(port)}, ioDiscard(), &stderr)
+	if code != 1 {
+		t.Fatalf("exit %d\n%s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "无法监听") {
+		t.Fatalf("want listen error:\n%s", stderr.String())
+	}
+}
+
+func TestVersionString_Override(t *testing.T) {
+	old := Version
+	t.Cleanup(func() { Version = old })
+	Version = "1.2.3"
+	if got := versionString(); got != "1.2.3" {
+		t.Fatalf("got %q", got)
+	}
+	Version = "   "
+	if got := versionString(); got == "" {
+		t.Fatal("blank version should still yield a non-empty fallback")
+	}
+}
+
+func TestIsLoopback_LocalhostAndIPv6(t *testing.T) {
+	if !isLoopback("localhost") || !isLoopback("::1") || !isLoopback("127.0.0.1") {
+		t.Fatal("loopback hosts")
+	}
+	if isLoopback("8.8.8.8") || isLoopback("not-an-ip") {
+		t.Fatal("non-loopback")
+	}
+}
+
+func TestPrintReady_IPv6Any(t *testing.T) {
+	var buf bytes.Buffer
+	file := &config.File{Providers: map[string]*config.Provider{
+		"ds": {Name: "ds", Protocol: config.ProtocolOpenAIChat, APIKey: "sk-real"},
+	}}
+	printReady(&buf, "[::]:9999", file)
+	s := buf.String()
+	if !strings.Contains(s, "http://127.0.0.1:9999") {
+		t.Fatalf("want rewritten host:\n%s", s)
+	}
+	if !strings.Contains(s, "ds (openai_chat)") {
+		t.Fatalf("provider:\n%s", s)
+	}
+}
+
+func TestMainContext_LocalhostListen(t *testing.T) {
+	dir := t.TempDir()
+	raw := `{
+  "ds": {
+    "base_url": "https://api.example.com",
+    "protocol": "openai_chat",
+    "api_key": "sk-live"
+  }
+}`
+	if err := os.WriteFile(filepath.Join(dir, config.ProviderFileName), []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stderr := &syncBuf{}
+	done := make(chan int, 1)
+	go func() {
+		done <- MainContext(ctx, []string{"caosi", "--config-dir", dir, "--port", "0", "--listen", "localhost", "--log-level", "warn"}, nil, stderr)
+	}()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if strings.Contains(stderr.String(), "正在监听") {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !strings.Contains(stderr.String(), "正在监听") {
+		cancel()
+		t.Fatalf("ready missing:\n%s", stderr.String())
+	}
+	cancel()
+	select {
+	case code := <-done:
+		if code != 0 {
+			t.Fatalf("exit %d\n%s", code, stderr.String())
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("did not return")
+	}
+}

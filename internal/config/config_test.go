@@ -205,3 +205,72 @@ func TestSampleParsesAfterStrip(t *testing.T) {
 		t.Fatal("missing deepseek")
 	}
 }
+
+func TestLoad_MissingFile(t *testing.T) {
+	_, err := Load(t.TempDir())
+	if err == nil {
+		t.Fatal("missing file should error")
+	}
+}
+
+func TestLoad_EmptyProviders(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ProviderFileName), []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load(dir)
+	if err == nil || !strings.Contains(err.Error(), "没有配置任何 Provider") {
+		t.Fatalf("want empty providers, got %v", err)
+	}
+}
+
+func TestLoad_ProviderNotObject(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ProviderFileName), []byte(`{"p": "nope"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load(dir)
+	if err == nil {
+		t.Fatal("want unmarshal error")
+	}
+}
+
+func TestLoad_InvalidJSON(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ProviderFileName), []byte(`[1,2]`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load(dir)
+	if err == nil {
+		t.Fatal("array is not an object map")
+	}
+}
+
+func TestStripJSONC_EscapedQuoteAndLoneSlash(t *testing.T) {
+	out, err := StripJSONC([]byte(`{"a": "say \"hi\"", "b": 1 / 2}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	if !strings.Contains(s, `\"hi\"`) {
+		t.Fatalf("escaped quote lost: %s", s)
+	}
+	if !strings.Contains(s, "/") {
+		t.Fatalf("lone slash stripped: %s", s)
+	}
+
+	out, err = StripJSONC([]byte("{\"a\":1, \n}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(out), ", \n}") || strings.Contains(string(out), ",}") {
+		if strings.Contains(string(out), ",}") {
+			t.Fatalf("trailing comma left: %s", out)
+		}
+	}
+
+	got := stripTrailingCommas([]byte(`"oops`))
+	if !strings.Contains(string(got), `"oops`) {
+		t.Fatalf("unclosed string remainder: %s", got)
+	}
+}

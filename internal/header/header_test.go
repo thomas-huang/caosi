@@ -100,3 +100,58 @@ func TestApply_ClaudeUsesXApiKey(t *testing.T) {
 		t.Fatalf("beta=%q", dst.Get("Anthropic-Beta"))
 	}
 }
+
+func TestApply_EmptyKeyNilSrcAndSkippedHeaders(t *testing.T) {
+	p := &config.Provider{
+		Protocol: config.ProtocolOpenAIChat,
+		APIKey:   "",
+		Headers:  map[string]string{"": "x", "Host": "evil.example", "X-Custom": "yes"},
+	}
+	dst := make(http.Header)
+	Apply(dst, nil, p, "")
+	if dst.Get("Authorization") != "" {
+		t.Fatalf("empty key should not inject auth, got %q", dst.Get("Authorization"))
+	}
+	if dst.Get("Content-Type") != "application/json" {
+		t.Fatalf("default content-type=%q", dst.Get("Content-Type"))
+	}
+	if dst.Get("Host") == "evil.example" {
+		t.Fatal("Host override must be skipped")
+	}
+	if dst.Get("X-Custom") != "yes" {
+		t.Fatal("custom header missing")
+	}
+
+	src := make(http.Header)
+	src.Set("OpenAI-Organization", "org-1")
+	src.Set("OpenAI-Project", "proj-1")
+	src.Set("Accept", "application/json")
+	dst = make(http.Header)
+	p.APIKey = "sk"
+	Apply(dst, src, p, "api.example.com")
+	if dst.Get("OpenAI-Organization") != "org-1" || dst.Get("OpenAI-Project") != "proj-1" {
+		t.Fatalf("openai org/project dropped: %v", dst)
+	}
+	if dst.Get("Host") != "api.example.com" {
+		t.Fatalf("host=%q", dst.Get("Host"))
+	}
+	if dst.Get("Authorization") != "Bearer sk" {
+		t.Fatalf("auth=%q", dst.Get("Authorization"))
+	}
+}
+
+func TestCopyResponse_Nil(t *testing.T) {
+	CopyResponse(nil, make(http.Header))
+	CopyResponse(make(http.Header), nil)
+}
+
+func TestApply_ClaudeKeepsExistingVersion(t *testing.T) {
+	p := &config.Provider{Protocol: config.ProtocolClaudeMessages, APIKey: "k"}
+	src := make(http.Header)
+	src.Set("Anthropic-Version", "2024-01-01")
+	dst := make(http.Header)
+	Apply(dst, src, p, "")
+	if dst.Get("Anthropic-Version") != "2024-01-01" {
+		t.Fatalf("version overwritten: %q", dst.Get("Anthropic-Version"))
+	}
+}
