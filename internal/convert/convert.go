@@ -50,11 +50,11 @@ func Request(client, upstream config.Protocol, body []byte, model string, stream
 	if client == upstream {
 		return applyModel(body, model)
 	}
-	chat, err := toChatRequest(client, body, model, stream)
+	ir, err := toIRRequest(client, body, model, stream)
 	if err != nil {
 		return nil, err
 	}
-	return fromChatRequest(upstream, chat, model, stream)
+	return fromIRRequest(upstream, ir, model, stream)
 }
 
 func Response(client, upstream config.Protocol, body []byte) ([]byte, error) {
@@ -64,11 +64,11 @@ func Response(client, upstream config.Protocol, body []byte) ([]byte, error) {
 	if looksLikeError(body) {
 		return translateError(client, body)
 	}
-	chat, err := toChatResponse(upstream, body)
+	ir, err := toIRResponse(upstream, body)
 	if err != nil {
 		return nil, err
 	}
-	return fromChatResponse(client, chat)
+	return fromIRResponse(client, ir)
 }
 
 func Stream(client, upstream config.Protocol, r io.Reader, w io.Writer) error {
@@ -113,61 +113,65 @@ func Stream(client, upstream config.Protocol, r io.Reader, w io.Writer) error {
 	return nil
 }
 
-func toChatRequest(p config.Protocol, body []byte, model string, stream bool) ([]byte, error) {
+func toIRRequest(p config.Protocol, body []byte, model string, stream bool) (irRequest, error) {
 	switch p {
 	case config.ProtocolOpenAIChat:
-		return applyModel(body, model)
+		return chatToIRRequest(body, model, stream)
 	case config.ProtocolOpenAIResponses:
-		return responsesToChat(body, model, stream)
+		return responsesToIRRequest(body, model, stream)
 	case config.ProtocolClaudeMessages:
-		return claudeToOpenAIChat(body, model, stream)
+		return claudeToIRRequest(body, model, stream)
 	case config.ProtocolGemini:
-		return geminiToOpenAIChat(body, model, stream)
+		return geminiToIRRequest(body, model, stream)
 	default:
-		return nil, fmt.Errorf("未知 Client Protocol %s", p)
+		return irRequest{}, fmt.Errorf("未知 Client Protocol %s", p)
 	}
 }
 
-func fromChatRequest(p config.Protocol, chat []byte, model string, stream bool) ([]byte, error) {
-	switch p {
-	case config.ProtocolOpenAIChat:
-		return applyModel(chat, model)
-	case config.ProtocolOpenAIResponses:
-		return chatToResponses(chat, model, stream)
-	case config.ProtocolClaudeMessages:
-		return openAIChatToClaudeRequest(chat, model, stream)
-	case config.ProtocolGemini:
-		return openAIChatToGemini(chat, model, stream)
-	default:
-		return nil, fmt.Errorf("未知 Upstream Protocol %s", p)
+func fromIRRequest(p config.Protocol, ir irRequest, model string, stream bool) ([]byte, error) {
+	if model != "" {
+		ir.Model = model
 	}
-}
-
-func toChatResponse(p config.Protocol, body []byte) ([]byte, error) {
+	ir.Stream = stream
 	switch p {
 	case config.ProtocolOpenAIChat:
-		return body, nil
+		return irToChatRequest(ir)
 	case config.ProtocolOpenAIResponses:
-		return responsesToChatResponse(body)
+		return irToResponsesRequest(ir)
 	case config.ProtocolClaudeMessages:
-		return claudeToChatResponse(body)
+		return irToClaudeRequest(ir)
 	case config.ProtocolGemini:
-		return geminiToChatResponse(body)
+		return irToGeminiRequest(ir)
 	default:
 		return nil, fmt.Errorf("未知 Upstream Protocol %s", p)
 	}
 }
 
-func fromChatResponse(p config.Protocol, chat []byte) ([]byte, error) {
+func toIRResponse(p config.Protocol, body []byte) (irResponse, error) {
 	switch p {
 	case config.ProtocolOpenAIChat:
-		return chat, nil
+		return chatToIRResponse(body)
 	case config.ProtocolOpenAIResponses:
-		return chatToResponsesResponse(chat)
+		return responsesToIRResponse(body)
 	case config.ProtocolClaudeMessages:
-		return openAIChatToClaude(chat)
+		return claudeToIRResponse(body)
 	case config.ProtocolGemini:
-		return chatToGeminiResponse(chat)
+		return geminiToIRResponse(body)
+	default:
+		return irResponse{}, fmt.Errorf("未知 Upstream Protocol %s", p)
+	}
+}
+
+func fromIRResponse(p config.Protocol, ir irResponse) ([]byte, error) {
+	switch p {
+	case config.ProtocolOpenAIChat:
+		return irToChatResponse(ir)
+	case config.ProtocolOpenAIResponses:
+		return irToResponsesResponse(ir)
+	case config.ProtocolClaudeMessages:
+		return irToClaudeResponse(ir)
+	case config.ProtocolGemini:
+		return irToGeminiResponse(ir)
 	default:
 		return nil, fmt.Errorf("未知 Client Protocol %s", p)
 	}

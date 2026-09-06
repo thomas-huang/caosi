@@ -41,7 +41,30 @@ A request whose Client Protocol is the same as the Provider's Upstream Protocol,
 Rewriting a request and its matching response between different Client and Upstream Protocols.
 
 **Conversion Contract**:
-The capabilities Conversion must preserve: text, system instruction, tools, thinking/reasoning, and image parts.
+The capabilities Conversion must preserve when the other protocol has an Analogue: text, system instruction, tools, thinking/reasoning, Image Parts, Document Parts, Audio Parts, and Video Parts. A part nested in a tool result is still that part. A capability with no Analogue is dropped; Conversion still sends the rest of the request.
+
+**Analogue**:
+A field or part kind in the other protocol that can express the same Conversion Contract capability.
+
+**IR**:
+The in-process message model Conversion remaps through. It can hold every Conversion Contract capability. It is not a wire protocol and not OpenAI Chat.
+_Avoid_: OpenAI Chat IR, hub, intermediate protocol, Chat
+
+**Image Part**:
+An image carried inside a chat message on the request or the response, not a request to a dedicated image API.
+_Avoid_: image API, vision, 生图, attachment, multimodal
+
+**Document Part**:
+A chat-message payload that is not text, image, audio, or video. Not a Provider File, and not a Files API object.
+_Avoid_: file, attachment, Files API, 文件
+
+**Audio Part**:
+Audio carried inside a chat message, not a request to a dedicated transcription, speech, or realtime API.
+_Avoid_: audio API, realtime, Whisper, TTS
+
+**Video Part**:
+Video carried inside a chat message, not a request to a dedicated video-generation API.
+_Avoid_: video API, 生视频, multimodal
 
 **Model Override**:
 An optional model name on a Provider. When present, it replaces the client's model name on the upstream request; when absent, the client's model name is kept.

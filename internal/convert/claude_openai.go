@@ -2,7 +2,6 @@ package convert
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/thomas-huang/caosi/internal/config"
@@ -82,6 +81,12 @@ type openaiMsg struct {
 	ToolCalls        []openaiToolCall `json:"tool_calls,omitempty"`
 	ToolCallID       string           `json:"tool_call_id,omitempty"`
 	Name             string           `json:"name,omitempty"`
+	Audio            *openaiAudio     `json:"audio,omitempty"`
+}
+
+type openaiAudio struct {
+	ID   string `json:"id,omitempty"`
+	Data string `json:"data,omitempty"`
 }
 
 type openaiTool struct {
@@ -114,75 +119,6 @@ type openaiImgURL struct {
 	URL string `json:"url"`
 }
 
-func claudeToOpenAIChat(body []byte, model string, stream bool) ([]byte, error) {
-	var in claudeReq
-	if err := json.Unmarshal(body, &in); err != nil {
-		return nil, fmt.Errorf("Claude 请求不是合法 JSON: %w", err)
-	}
-	out := openaiChatReq{Stream: stream}
-	if model != "" {
-		out.Model = model
-	} else {
-		out.Model = in.Model
-	}
-	if in.MaxTokens > 0 {
-		out.MaxTokens = in.MaxTokens
-	}
-	out.Temperature = in.Temperature
-	out.TopP = in.TopP
-	if len(in.StopSequences) > 0 {
-		out.Stop = in.StopSequences
-	}
-	if stream {
-		out.StreamOptions = &streamOpts{IncludeUsage: true}
-	}
-	if in.Thinking != nil {
-		switch in.Thinking.Type {
-		case "enabled", "adaptive", "auto":
-			out.ReasoningEffort = "medium"
-			if in.Thinking.BudgetTokens >= 16000 {
-				out.ReasoningEffort = "high"
-			} else if in.Thinking.BudgetTokens > 0 && in.Thinking.BudgetTokens < 2000 {
-				out.ReasoningEffort = "low"
-			}
-		case "disabled":
-			out.ReasoningEffort = "low"
-		}
-	}
-
-	if sys := systemText(in.System); sys != "" {
-		out.Messages = append(out.Messages, openaiMsg{Role: "system", Content: sys})
-	}
-
-	for _, msg := range in.Messages {
-		converted, err := claudeMessageToOpenAI(msg)
-		if err != nil {
-			return nil, err
-		}
-		out.Messages = append(out.Messages, converted...)
-	}
-
-	for _, t := range in.Tools {
-		params := t.InputSchema
-		if len(params) == 0 {
-			params = json.RawMessage(`{"type":"object","properties":{}}`)
-		}
-		out.Tools = append(out.Tools, openaiTool{
-			Type: "function",
-			Function: openaiToolFn{
-				Name:        t.Name,
-				Description: t.Description,
-				Parameters:  params,
-			},
-		})
-	}
-	if tc := convertToolChoice(in.ToolChoice); tc != nil {
-		out.ToolChoice = tc
-	}
-
-	return json.Marshal(out)
-}
-
 func systemText(raw json.RawMessage) string {
 	if len(raw) == 0 || string(raw) == "null" {
 		return ""
@@ -202,123 +138,6 @@ func systemText(raw json.RawMessage) string {
 		return b.String()
 	}
 	return ""
-}
-
-func claudeMessageToOpenAI(msg claudeMsg) ([]openaiMsg, error) {
-	role := msg.Role
-	if role == "" {
-		role = "user"
-	}
-	var asString string
-	if err := json.Unmarshal(msg.Content, &asString); err == nil {
-		return []openaiMsg{{Role: role, Content: asString}}, nil
-	}
-	var blocks []claudeBlock
-	if err := json.Unmarshal(msg.Content, &blocks); err != nil {
-		return []openaiMsg{{Role: role, Content: ""}}, nil
-	}
-
-	var (
-		parts     []openaiPart
-		toolCalls []openaiToolCall
-		out       []openaiMsg
-		textBuf   strings.Builder
-	)
-
-	for _, bl := range blocks {
-		switch bl.Type {
-		case "text":
-			if looksLikeImageOnly(blocks) {
-				parts = append(parts, openaiPart{Type: "text", Text: bl.Text})
-			} else {
-				textBuf.WriteString(bl.Text)
-			}
-		case "image":
-			url := ""
-			if bl.Source != nil {
-				if bl.Source.Type == "url" {
-					url = bl.Source.URL
-				} else if bl.Source.Data != "" {
-					mt := bl.Source.MediaType
-					if mt == "" {
-						mt = "image/png"
-					}
-					url = "data:" + mt + ";base64," + bl.Source.Data
-				}
-			}
-			if url != "" {
-				parts = append(parts, openaiPart{Type: "image_url", ImageURL: &openaiImgURL{URL: url}})
-			}
-		case "tool_use":
-			args := "{}"
-			if len(bl.Input) > 0 {
-				args = string(bl.Input)
-			}
-			tc := openaiToolCall{ID: bl.ID, Type: "function"}
-			tc.Function.Name = bl.Name
-			tc.Function.Arguments = args
-			toolCalls = append(toolCalls, tc)
-		case "tool_result":
-			content := toolResultText(bl.Content)
-			out = append(out, openaiMsg{
-				Role:       "tool",
-				Content:    content,
-				ToolCallID: bl.ToolUseID,
-			})
-		case "thinking":
-			// analogue is reasoning_effort on the request, not a message block
-		}
-	}
-
-	if len(toolCalls) > 0 {
-		content := any(nil)
-		if textBuf.Len() > 0 {
-			content = textBuf.String()
-		}
-		out = append([]openaiMsg{{Role: "assistant", Content: content, ToolCalls: toolCalls}}, out...)
-		return out, nil
-	}
-	if len(out) > 0 && textBuf.Len() == 0 && len(parts) == 0 {
-		return out, nil
-	}
-	if len(parts) > 0 {
-		if textBuf.Len() > 0 {
-			parts = append([]openaiPart{{Type: "text", Text: textBuf.String()}}, parts...)
-		}
-		return append([]openaiMsg{{Role: role, Content: parts}}, out...), nil
-	}
-	if textBuf.Len() > 0 || len(out) == 0 {
-		return append([]openaiMsg{{Role: role, Content: textBuf.String()}}, out...), nil
-	}
-	return out, nil
-}
-
-func looksLikeImageOnly(blocks []claudeBlock) bool {
-	for _, bl := range blocks {
-		if bl.Type == "image" {
-			return true
-		}
-	}
-	return false
-}
-
-func toolResultText(raw json.RawMessage) string {
-	if len(raw) == 0 {
-		return ""
-	}
-	var s string
-	if err := json.Unmarshal(raw, &s); err == nil {
-		return s
-	}
-	var blocks []claudeBlock
-	if err := json.Unmarshal(raw, &blocks); err == nil {
-		var b strings.Builder
-		for _, bl := range blocks {
-			b.WriteString(bl.Text)
-		}
-		return b.String()
-	}
-	return string(raw)
 }
 
 func convertToolChoice(raw json.RawMessage) any {
@@ -364,6 +183,7 @@ type openaiChatResp struct {
 			Content          string           `json:"content"`
 			ReasoningContent string           `json:"reasoning_content"`
 			ToolCalls        []openaiToolCall `json:"tool_calls"`
+			Audio            *openaiAudio     `json:"audio"`
 		} `json:"message"`
 	} `json:"choices"`
 	Usage *struct {
@@ -393,64 +213,6 @@ type claudeError struct {
 		Type    string `json:"type"`
 		Message string `json:"message"`
 	} `json:"error"`
-}
-
-func openAIChatToClaude(body []byte) ([]byte, error) {
-	var in openaiChatResp
-	if err := json.Unmarshal(body, &in); err != nil {
-		return nil, fmt.Errorf("OpenAI 响应不是合法 JSON: %w", err)
-	}
-	if in.Error != nil && in.Error.Message != "" {
-		return encodeClaudeError(in.Error.Type, in.Error.Message)
-	}
-	out := claudeResp{
-		ID:    in.ID,
-		Type:  "message",
-		Role:  "assistant",
-		Model: in.Model,
-	}
-	if out.ID == "" {
-		out.ID = "msg_caosi"
-	}
-	if in.Usage != nil {
-		out.Usage.InputTokens = in.Usage.PromptTokens
-		out.Usage.OutputTokens = in.Usage.CompletionTokens
-	}
-	if len(in.Choices) == 0 {
-		out.Content = []claudeBlock{}
-		out.StopReason = "end_turn"
-		return json.Marshal(out)
-	}
-	ch := in.Choices[0]
-	out.StopReason = mapFinishReason(ch.FinishReason)
-	if len(ch.Message.ToolCalls) > 0 && out.StopReason == "end_turn" {
-		out.StopReason = "tool_use"
-	}
-	if ch.Message.ReasoningContent != "" {
-		out.Content = append(out.Content, claudeBlock{Type: "thinking", Thinking: ch.Message.ReasoningContent})
-	}
-	if ch.Message.Content != "" {
-		out.Content = append(out.Content, claudeBlock{Type: "text", Text: ch.Message.Content})
-	}
-	for _, tc := range ch.Message.ToolCalls {
-		var input json.RawMessage
-		if json.Valid([]byte(tc.Function.Arguments)) {
-			input = json.RawMessage(tc.Function.Arguments)
-		} else {
-			b, _ := json.Marshal(tc.Function.Arguments)
-			input = b
-		}
-		out.Content = append(out.Content, claudeBlock{
-			Type:  "tool_use",
-			ID:    tc.ID,
-			Name:  tc.Function.Name,
-			Input: input,
-		})
-	}
-	if len(out.Content) == 0 {
-		out.Content = []claudeBlock{}
-	}
-	return json.Marshal(out)
 }
 
 func mapFinishReason(r string) string {

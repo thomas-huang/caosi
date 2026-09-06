@@ -57,20 +57,24 @@ The hop does not follow 3xx or decode gzip ([ADR-0023](adr/0023-upstream-hop-no-
 
 ## Conversion
 
-The Conversion seam is `Request`, `Response`, `Stream`, plus `NeedsConvert`, `UpstreamPath`, `ModelFromBody`, `ClientError`. Pairwise field maps sit behind that seam.
+The Conversion seam is `Request`, `Response`, `Stream`, plus `NeedsConvert`, `UpstreamPath`, `ModelFromBody`, `ClientError`. Cross-protocol remap is client/upstream ↔ IR ([ADR-0024](adr/0024-ir-is-not-openai-chat.md)). Incremental stream pairs stay as listed below and do not carry media.
 
-Non-stream Conversion remaps through OpenAI Chat in-process ([ADR-0019](adr/0019-conversion-uses-chat-as-in-process-ir.md)):
+Non-stream Conversion remaps through an in-process IR that can hold every Conversion Contract capability ([ADR-0024](adr/0024-ir-is-not-openai-chat.md), [ADR-0025](adr/0025-media-parts-in-the-conversion-contract.md)). OpenAI Chat is not that IR.
 
 ```mermaid
 flowchart LR
   C["Client Protocol body"]
-  IR["OpenAI Chat IR"]
+  IR["IR"]
   U["Upstream Protocol body"]
 
-  C -->|"toChat"| IR -->|"fromChat"| U
+  C -->|"toIR"| IR -->|"fromIR"| U
 ```
 
-The reverse path is `Response`: upstream body → Chat IR → Client Protocol. Upstream errors become Client Protocol errors ([ADR-0008](adr/0008-errors-match-the-client-protocol.md)).
+The reverse path is `Response`: upstream body → IR → Client Protocol. Upstream errors become Client Protocol errors ([ADR-0008](adr/0008-errors-match-the-client-protocol.md)).
+
+An IR message is a role plus an ordered list of parts. A part is text, thinking, a tool call, a tool result, or an Image / Document / Audio / Video Part. Media parts carry a MIME type and either inline bytes or an http(s) URL — never a `file_id`. A part nested in a tool result is still that part.
+
+When the other protocol has an Analogue, Conversion remaps the part. When it does not, the part is dropped and the rest of the request is sent. Conversion does not fetch URLs, does not invent Chat fields such as `video_url`, and does not insert placeholder text.
 
 ### Stream
 
@@ -85,7 +89,7 @@ flowchart TD
   C["OpenAI Responses ← OpenAI Chat"]
   D["Gemini ← OpenAI Chat"]
   BUF["assemble complete upstream body"]
-  R["convert.Response via Chat IR"]
+  R["convert.Response via IR"]
   OUT["Client Protocol SSE or JSON"]
 
   S --> SAME
@@ -136,7 +140,7 @@ flowchart LR
   CG --> UG
 ```
 
-Same-protocol cells are Passthrough. Cross-protocol cells are Conversion. Conversion Contract: text, system instruction, tools, thinking/reasoning, image parts.
+Same-protocol cells are Passthrough. Cross-protocol cells are Conversion. Conversion Contract: text, system instruction, tools, thinking/reasoning, Image Parts, Document Parts, Audio Parts, and Video Parts, when an Analogue exists.
 
 ## Packages
 
