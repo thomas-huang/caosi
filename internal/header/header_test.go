@@ -34,6 +34,26 @@ func TestApply_StripsClientCredsAndInjectsBearer(t *testing.T) {
 	if dst.Get("Anthropic-Beta") != "" {
 		t.Fatal("anthropic-beta must not go to OpenAI upstream")
 	}
+	if dst.Get("Host") != "api.deepseek.com" {
+		t.Fatalf("host=%q", dst.Get("Host"))
+	}
+}
+
+func TestCopyResponse_StripsHopByHopAndSetCookie(t *testing.T) {
+	src := make(http.Header)
+	src.Set("X-Request-Id", "abc")
+	src.Set("Set-Cookie", "sid=1")
+	src.Set("Upgrade", "websocket")
+	src.Set("Connection", "close")
+	src.Add("TE", "trailers")
+	dst := make(http.Header)
+	CopyResponse(dst, src)
+	if dst.Get("X-Request-Id") != "abc" {
+		t.Fatalf("x-request-id=%q", dst.Get("X-Request-Id"))
+	}
+	if dst.Get("Set-Cookie") != "" || dst.Get("Upgrade") != "" || dst.Get("Connection") != "" || dst.Get("TE") != "" {
+		t.Fatalf("hop-by-hop leaked: %v", dst)
+	}
 }
 
 func TestApply_GeminiUsesGoogAPIKey(t *testing.T) {

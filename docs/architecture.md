@@ -48,9 +48,12 @@ flowchart TD
   UP -->|Conversion + JSON| RESP
   LOOK -.->|missing Provider or protocol| ERR
   UP -.->|connect / remap failure| ERR
+  UP -.->|3xx or oversize JSON| ERR
 ```
 
 `convert.Request` also applies Model Override when the Provider has one, including on Passthrough.
+
+The hop does not follow 3xx or decode gzip ([ADR-0023](adr/0023-upstream-hop-no-redirect-no-gzip.md)). A 3xx becomes ClientError 502. Passthrough copies response headers minus hop-by-hop and `Set-Cookie`; Conversion synthesizes `Content-Type`. Client query is kept only on Passthrough.
 
 ## Conversion
 
@@ -158,7 +161,7 @@ flowchart TB
 | --- | --- |
 | `config` | Provider File, Provider, Protocol |
 | `protocol` | Client Protocol from path; `base_url` join |
-| `header` | Header allowlist by Upstream Protocol; Provider credential |
+| `header` | Header allowlist by Upstream Protocol; Provider credential; Passthrough response headers |
 | `convert` | Passthrough Model Override; Conversion; Client Protocol errors |
 | `server` | Listen path, Provider lookup, HTTP hop, hot reload |
 | `app` | CLI, loopback bind, first-run template |

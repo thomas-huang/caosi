@@ -8,7 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -20,7 +19,7 @@ import (
 	"github.com/thomas-huang/caosi/internal/protocol"
 )
 
-const maxBody = 32 << 20
+var maxBody int64 = 32 << 20
 
 type Server struct {
 	mu     sync.RWMutex
@@ -38,8 +37,12 @@ func New(file *config.File, log *slog.Logger) *Server {
 		log:  log,
 		client: &http.Client{
 			Timeout: 0,
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
 			Transport: &http.Transport{
 				Proxy:                 http.ProxyFromEnvironment,
+				DisableCompression:    true,
 				MaxIdleConns:          32,
 				IdleConnTimeout:       90 * time.Second,
 				TLSHandshakeTimeout:   15 * time.Second,
@@ -153,7 +156,7 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 		s.writeClientError(w, clientProto, http.StatusBadRequest, "读请求失败: "+err.Error())
 		return
 	}
-	if len(body) > maxBody {
+	if int64(len(body)) > maxBody {
 		s.writeClientError(w, clientProto, http.StatusRequestEntityTooLarge, "请求体超过 32MiB")
 		return
 	}
@@ -185,10 +188,9 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 		s.writeClientError(w, clientProto, http.StatusBadGateway, "无法构造上游请求: "+err.Error())
 		return
 	}
-	if u, err := url.Parse(upURL); err == nil {
-		req.Host = u.Host
-	}
-	header.Apply(req.Header, r.Header, p, req.Host)
+	host := header.UpstreamHost(p.BaseURL)
+	req.Host = host
+	header.Apply(req.Header, r.Header, p, host)
 	req.ContentLength = int64(len(upBody))
 
 	resp, err := s.client.Do(req)
@@ -200,13 +202,33 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 	defer resp.Body.Close()
 
 	converting := convert.NeedsConvert(clientProto, p.Protocol)
+	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxBody+1))
+		s.writeClientError(w, clientProto, http.StatusBadGateway, "上游返回重定向")
+		s.logReq(r.Context(), p.Name, clientProto, p.Protocol, http.StatusBadGateway, time.Since(start), converting)
+		return
+	}
+
 	ct := resp.Header.Get("Content-Type")
 	isSSE := strings.Contains(ct, "text/event-stream") || stream
 
 	if !converting {
-		copyHeader(w.Header(), resp.Header)
+		if isSSE {
+			header.CopyResponse(w.Header(), resp.Header)
+			w.WriteHeader(resp.StatusCode)
+			_, _ = io.Copy(&flushWriter{w: w}, resp.Body)
+			s.logReq(r.Context(), p.Name, clientProto, p.Protocol, resp.StatusCode, time.Since(start), false)
+			return
+		}
+		upResp, err := readJSONBody(resp.Body)
+		if err != nil {
+			s.writeClientError(w, clientProto, http.StatusBadGateway, err.Error())
+			s.logReq(r.Context(), p.Name, clientProto, p.Protocol, http.StatusBadGateway, time.Since(start), false)
+			return
+		}
+		header.CopyResponse(w.Header(), resp.Header)
 		w.WriteHeader(resp.StatusCode)
-		_, _ = io.Copy(&flushWriter{w: w}, resp.Body)
+		_, _ = w.Write(upResp)
 		s.logReq(r.Context(), p.Name, clientProto, p.Protocol, resp.StatusCode, time.Since(start), false)
 		return
 	}
@@ -224,9 +246,10 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	upResp, err := io.ReadAll(io.LimitReader(resp.Body, maxBody+1))
+	upResp, err := readJSONBody(resp.Body)
 	if err != nil {
-		s.writeClientError(w, clientProto, http.StatusBadGateway, "读上游响应失败: "+err.Error())
+		s.writeClientError(w, clientProto, http.StatusBadGateway, err.Error())
+		s.logReq(r.Context(), p.Name, clientProto, p.Protocol, http.StatusBadGateway, time.Since(start), true)
 		return
 	}
 	out, err := convert.Response(clientProto, p.Protocol, upResp)
@@ -238,6 +261,17 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(resp.StatusCode)
 	_, _ = w.Write(out)
 	s.logReq(r.Context(), p.Name, clientProto, p.Protocol, resp.StatusCode, time.Since(start), true)
+}
+
+func readJSONBody(r io.Reader) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(r, maxBody+1))
+	if err != nil {
+		return nil, fmt.Errorf("读上游响应失败: %w", err)
+	}
+	if int64(len(body)) > maxBody {
+		return nil, fmt.Errorf("响应体超过 32MiB")
+	}
+	return body, nil
 }
 
 func (s *Server) writeClientError(w http.ResponseWriter, client config.Protocol, status int, msg string) {
@@ -278,24 +312,6 @@ func wantsStream(body []byte, path string) bool {
 	}
 	v, _ := m["stream"].(bool)
 	return v
-}
-
-func copyHeader(dst, src http.Header) {
-	for k, vs := range src {
-		ck := http.CanonicalHeaderKey(k)
-		if ck == "Connection" || ck == "Transfer-Encoding" || ck == "Keep-Alive" {
-			continue
-		}
-		for _, v := range vs {
-			dst.Add(k, v)
-		}
-	}
-}
-
-func flush(w http.ResponseWriter) {
-	if f, ok := w.(http.Flusher); ok {
-		f.Flush()
-	}
 }
 
 type flushWriter struct {

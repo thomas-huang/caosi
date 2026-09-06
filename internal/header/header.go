@@ -58,7 +58,35 @@ func Apply(dst http.Header, src http.Header, p *config.Provider, upstreamHost st
 	if dst.Get("Content-Type") == "" {
 		dst.Set("Content-Type", "application/json")
 	}
-	_ = upstreamHost
+	if host := strings.TrimSpace(upstreamHost); host != "" {
+		dst.Set("Host", host)
+	}
+}
+
+// CopyResponse copies upstream response headers for Passthrough, skipping
+// hop-by-hop headers and Set-Cookie.
+func CopyResponse(dst, src http.Header) {
+	if dst == nil || src == nil {
+		return
+	}
+	for k, vs := range src {
+		if skipResponse(k) {
+			continue
+		}
+		for _, v := range vs {
+			dst.Add(k, v)
+		}
+	}
+}
+
+func skipResponse(key string) bool {
+	ck := http.CanonicalHeaderKey(key)
+	for _, h := range hopByHop {
+		if ck == http.CanonicalHeaderKey(h) {
+			return true
+		}
+	}
+	return false
 }
 
 func skipIncoming(key string, upstream config.Protocol) bool {

@@ -454,3 +454,271 @@ func TestHotReload_KeepsLastGoodThenAppliesValid(t *testing.T) {
 		t.Fatalf("valid save should apply new key, got %v", sawAuth)
 	}
 }
+
+func TestHop_RedirectBecomes502(t *testing.T) {
+	followed := false
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/followed") {
+			followed = true
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true}`))
+			return
+		}
+		w.Header().Set("Location", r.URL.Path+"/followed")
+		w.WriteHeader(http.StatusFound)
+	}))
+	t.Cleanup(up.Close)
+
+	file := &config.File{Providers: map[string]*config.Provider{
+		"ds": {Name: "ds", BaseURL: up.URL, Protocol: config.ProtocolOpenAIChat, APIKey: "sk-real"},
+	}}
+	s := New(file, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	req := httptest.NewRequest(http.MethodPost, "/ds/v1/chat/completions", strings.NewReader(`{"model":"x","messages":[]}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if followed {
+		t.Fatal("must not follow 3xx")
+	}
+	if rr.Code != http.StatusBadGateway {
+		t.Fatalf("status %d %s", rr.Code, rr.Body.Bytes())
+	}
+	if rr.Header().Get("Location") != "" {
+		t.Fatalf("Location leaked: %q", rr.Header().Get("Location"))
+	}
+	if !strings.Contains(rr.Body.String(), "上游返回重定向") {
+		t.Fatalf("want redirect error, got %s", rr.Body.Bytes())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/ds/v1/messages", strings.NewReader(`{"model":"claude-opus","max_tokens":16,"messages":[{"role":"user","content":"ping"}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if followed {
+		t.Fatal("must not follow 3xx on conversion")
+	}
+	if rr.Code != http.StatusBadGateway {
+		t.Fatalf("conversion status %d %s", rr.Code, rr.Body.Bytes())
+	}
+	if rr.Header().Get("Location") != "" {
+		t.Fatalf("Location leaked on conversion: %q", rr.Header().Get("Location"))
+	}
+	if !strings.Contains(rr.Body.String(), `"type":"error"`) {
+		t.Fatalf("want Claude error, got %s", rr.Body.Bytes())
+	}
+	if !strings.Contains(rr.Body.String(), "上游返回重定向") {
+		t.Fatalf("want redirect error, got %s", rr.Body.Bytes())
+	}
+}
+
+func TestHop_PassthroughResponseHeaders(t *testing.T) {
+	s, _ := testServer(t, config.ProtocolOpenAIChat, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Request-Id", "abc")
+		w.Header().Set("Set-Cookie", "sid=1")
+		w.Header().Set("Upgrade", "websocket")
+		w.Header().Set("Connection", "close")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"chatcmpl-1","choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`))
+	})
+	req := httptest.NewRequest(http.MethodPost, "/ds/v1/chat/completions", strings.NewReader(`{"model":"x","messages":[]}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if rr.Code != 200 {
+		t.Fatalf("status %d %s", rr.Code, rr.Body.Bytes())
+	}
+	if rr.Header().Get("X-Request-Id") != "abc" {
+		t.Fatalf("x-request-id=%q", rr.Header().Get("X-Request-Id"))
+	}
+	if rr.Header().Get("Set-Cookie") != "" || rr.Header().Get("Upgrade") != "" {
+		t.Fatalf("hop-by-hop leaked: %v", rr.Header())
+	}
+}
+
+func TestHop_ConversionOmitsUpstreamHeaders(t *testing.T) {
+	s, _ := testServer(t, config.ProtocolOpenAIChat, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Request-Id", "abc")
+		w.Header().Set("Openai-Ratelimit-Remaining", "9")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"chatcmpl-1","choices":[{"message":{"role":"assistant","content":"pong"},"finish_reason":"stop"}]}`))
+	})
+	req := httptest.NewRequest(http.MethodPost, "/ds/v1/messages", strings.NewReader(`{"model":"claude-opus","max_tokens":16,"messages":[{"role":"user","content":"ping"}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if rr.Code != 200 {
+		t.Fatalf("status %d %s", rr.Code, rr.Body.Bytes())
+	}
+	if rr.Header().Get("X-Request-Id") != "" || rr.Header().Get("Openai-Ratelimit-Remaining") != "" {
+		t.Fatalf("upstream headers leaked: %v", rr.Header())
+	}
+	if rr.Header().Get("Content-Type") != "application/json" {
+		t.Fatalf("content-type=%q", rr.Header().Get("Content-Type"))
+	}
+}
+
+func TestHop_QueryPassthroughKept(t *testing.T) {
+	var sawQuery string
+	s, _ := testServer(t, config.ProtocolOpenAIChat, func(w http.ResponseWriter, r *http.Request) {
+		sawQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"chatcmpl-1","choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`))
+	})
+	req := httptest.NewRequest(http.MethodPost, "/ds/v1/chat/completions?foo=bar", strings.NewReader(`{"model":"x","messages":[]}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if rr.Code != 200 {
+		t.Fatalf("status %d %s", rr.Code, rr.Body.Bytes())
+	}
+	if sawQuery != "foo=bar" {
+		t.Fatalf("query=%q", sawQuery)
+	}
+}
+
+func TestHop_QueryConversionDropped(t *testing.T) {
+	var sawQuery string
+	s, _ := testServer(t, config.ProtocolOpenAIChat, func(w http.ResponseWriter, r *http.Request) {
+		sawQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"chatcmpl-1","choices":[{"message":{"role":"assistant","content":"pong"},"finish_reason":"stop"}]}`))
+	})
+	req := httptest.NewRequest(http.MethodPost, "/ds/v1/messages?foo=bar", strings.NewReader(`{"model":"claude-opus","max_tokens":16,"messages":[{"role":"user","content":"ping"}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if rr.Code != 200 {
+		t.Fatalf("status %d %s", rr.Code, rr.Body.Bytes())
+	}
+	if sawQuery != "" {
+		t.Fatalf("conversion must drop client query, got %q", sawQuery)
+	}
+}
+
+func TestHop_GeminiStreamAddsAltSSE(t *testing.T) {
+	var sawQuery, sawPath string
+	s, _ := testServer(t, config.ProtocolGemini, func(w http.ResponseWriter, r *http.Request) {
+		sawQuery = r.URL.RawQuery
+		sawPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"candidates":[{"content":{"role":"model","parts":[{"text":"ok"}]}}]}`))
+	})
+	req := httptest.NewRequest(http.MethodPost, "/ds/v1/messages", strings.NewReader(`{"model":"claude-opus","max_tokens":16,"stream":true,"messages":[{"role":"user","content":"ping"}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if sawQuery != "alt=sse" {
+		t.Fatalf("query=%q path=%s", sawQuery, sawPath)
+	}
+	if !strings.Contains(sawPath, "streamGenerateContent") {
+		t.Fatalf("path=%s", sawPath)
+	}
+}
+
+func TestHop_JSONOversize502(t *testing.T) {
+	old := maxBody
+	maxBody = 256
+	t.Cleanup(func() { maxBody = old })
+	s, _ := testServer(t, config.ProtocolOpenAIChat, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(strings.Repeat("a", 300)))
+	})
+	req := httptest.NewRequest(http.MethodPost, "/ds/v1/chat/completions", strings.NewReader(`{"model":"x","messages":[]}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadGateway {
+		t.Fatalf("passthrough status %d %s", rr.Code, rr.Body.Bytes())
+	}
+	if !strings.Contains(rr.Body.String(), "响应体超过 32MiB") {
+		t.Fatalf("want oversize, got %s", rr.Body.Bytes())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/ds/v1/messages", strings.NewReader(`{"model":"claude-opus","max_tokens":16,"messages":[{"role":"user","content":"ping"}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadGateway {
+		t.Fatalf("conversion status %d %s", rr.Code, rr.Body.Bytes())
+	}
+	if !strings.Contains(rr.Body.String(), "响应体超过 32MiB") {
+		t.Fatalf("want oversize, got %s", rr.Body.Bytes())
+	}
+}
+
+func TestHop_SSEUnbounded(t *testing.T) {
+	old := maxBody
+	maxBody = 256
+	t.Cleanup(func() { maxBody = old })
+	payload := strings.Repeat("a", 300)
+	s, _ := testServer(t, config.ProtocolOpenAIChat, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(payload))
+	})
+	req := httptest.NewRequest(http.MethodPost, "/ds/v1/chat/completions", strings.NewReader(`{"model":"x","stream":true,"messages":[]}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if rr.Code != 200 {
+		t.Fatalf("status %d %s", rr.Code, rr.Body.Bytes())
+	}
+	if rr.Body.String() != payload {
+		t.Fatalf("sse truncated: %d bytes", rr.Body.Len())
+	}
+}
+
+func TestHop_HostFromBaseURL(t *testing.T) {
+	var sawHost string
+	s, _ := testServer(t, config.ProtocolOpenAIChat, func(w http.ResponseWriter, r *http.Request) {
+		sawHost = r.Host
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"chatcmpl-1","choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`))
+	})
+	req := httptest.NewRequest(http.MethodPost, "http://caosi.test/ds/v1/chat/completions", strings.NewReader(`{"model":"x","messages":[]}`))
+	req.Host = "caosi.test"
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if rr.Code != 200 {
+		t.Fatalf("status %d %s", rr.Code, rr.Body.Bytes())
+	}
+	if sawHost == "caosi.test" || sawHost == "" {
+		t.Fatalf("upstream host=%q", sawHost)
+	}
+}
+
+func TestHop_MethodCopied(t *testing.T) {
+	var sawMethod string
+	s, _ := testServer(t, config.ProtocolOpenAIChat, func(w http.ResponseWriter, r *http.Request) {
+		sawMethod = r.Method
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"chatcmpl-1"}`))
+	})
+	req := httptest.NewRequest(http.MethodGet, "/ds/v1/chat/completions", nil)
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if sawMethod != http.MethodGet {
+		t.Fatalf("method=%q", sawMethod)
+	}
+}
+
+func TestHop_NoAcceptEncoding(t *testing.T) {
+	var sawAE string
+	s, _ := testServer(t, config.ProtocolOpenAIChat, func(w http.ResponseWriter, r *http.Request) {
+		sawAE = r.Header.Get("Accept-Encoding")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"chatcmpl-1","choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`))
+	})
+	req := httptest.NewRequest(http.MethodPost, "/ds/v1/chat/completions", strings.NewReader(`{"model":"x","messages":[]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept-Encoding", "gzip")
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if rr.Code != 200 {
+		t.Fatalf("status %d %s", rr.Code, rr.Body.Bytes())
+	}
+	if sawAE != "" {
+		t.Fatalf("Accept-Encoding=%q", sawAE)
+	}
+}
