@@ -23,7 +23,7 @@ npm install -g @thomas-huang/caosi
 caosi --version
 ```
 
-需要 Node.js 18+，支持 macOS、Linux、Windows amd64。npm 包自带各平台二进制，安装时没有脚本，也不会访问 GitHub。
+需要 Node.js 18+，支持 macOS、Linux（amd64 和 arm64）、Windows amd64。npm 包自带各平台二进制，安装时没有脚本，也不会访问 GitHub。
 
 ## 运行
 
@@ -89,15 +89,18 @@ export GEMINI_API_BASE=http://127.0.0.1:9999/openrouter
 | `claude_messages` | Claude Messages |
 | `gemini` | Gemini generateContent |
 
-- `model` 可选：填了就改写客户端带来的模型名。
+- `model` 可选：填了就改写客户端带来的模型名，协议相同（直通）时也一样。
 - `headers` 可选，用来补 OpenRouter 之类的额外头。
 - `base_url` 是前缀。caosi 不会剥 `/v1`。写成上游真正要接的根（`https://openrouter.ai/api`，不要写成 `https://openrouter.ai/api/v1`）。
+
+协议相同就原样转发。协议不同会改写请求体：文本、系统指令、工具、思考，以及消息里的图片、文档、音频、视频，对端能表达就保留；不能表达的部分丢掉，其余照发。不会去拉取 URL，也不会走 Files API（`file_id`、`fileUri`）。独立的图片 / 文件 / 音频 / 视频 / embeddings 路径仍然是 404。
 
 ## 监听、健康检查、热加载
 
 - 只绑 loopback：`127.0.0.1`（或用 `--listen ::1`）。默认端口 `9999`（`--port`）。
-- `GET /health`
+- `GET /health` 返回当前 Provider Name 列表。
 - 保存 `providers.jsonc` 会热加载；坏文件保留上一份可用配置。
+- 请求体和 JSON 响应超过 32MiB 会 413。
 - 选项：`--config-dir`、`--port`、`--listen`、`--log-level`、`--version`。
 
 ## 明确不做

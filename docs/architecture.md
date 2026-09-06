@@ -18,7 +18,7 @@ flowchart LR
   CAOSI -->|"Passthrough or Conversion"| UP
 ```
 
-`app` binds loopback, loads the Provider File, and starts `server`. `/health` lists Provider Names. `health` is a Reserved Provider Name.
+If the Provider File is missing, `app` writes a sample and exits — it does not listen on an empty config. After a valid file exists, `app` binds loopback, loads it, and starts `server`. `GET /health` returns the Provider Names. `health` is a Reserved Provider Name.
 
 ## Request path
 
@@ -29,6 +29,7 @@ flowchart TD
   DET["Detect Client Protocol"]
   LOOK["Lookup Provider"]
   DEC{"Client Protocol = Upstream Protocol?"}
+  OV{"Model Override?"}
   REQCV["convert.Request"]
   PATH["UpstreamPath + JoinURL"]
   HDR["header allowlist + credential"]
@@ -40,7 +41,9 @@ flowchart TD
 
   REQ --> SPLIT --> DET --> LOOK
   LOOK --> DEC
-  DEC -->|yes, maybe Model Override| REQCV
+  DEC -->|yes| OV
+  OV -->|no| PATH
+  OV -->|yes| REQCV
   DEC -->|no| REQCV
   REQCV --> PATH --> HDR --> UP
   UP -->|Passthrough| PASS
@@ -48,12 +51,12 @@ flowchart TD
   UP -->|Conversion + JSON| RESP
   LOOK -.->|missing Provider or protocol| ERR
   UP -.->|connect / remap failure| ERR
-  UP -.->|3xx or oversize JSON| ERR
+  UP -.->|3xx or body over 32MiB| ERR
 ```
 
-`convert.Request` also applies Model Override when the Provider has one, including on Passthrough.
+Passthrough without a Model Override copies the request body. `convert.Request` applies Model Override on Passthrough when the Provider has one.
 
-The hop does not follow 3xx or decode gzip ([ADR-0023](adr/0023-upstream-hop-no-redirect-no-gzip.md)). A 3xx becomes ClientError 502. Passthrough copies response headers minus hop-by-hop and `Set-Cookie`; Conversion synthesizes `Content-Type`. Client query is kept only on Passthrough.
+`base_url` is a prefix; the remaining path is joined on without stripping `/v1` ([ADR-0006](adr/0006-base-url-is-a-prefix.md)). Request and JSON-response bodies over 32MiB are ClientError 413. The hop does not follow 3xx or decode gzip ([ADR-0023](adr/0023-upstream-hop-no-redirect-no-gzip.md)). A 3xx becomes ClientError 502. Header allowlist strips client credentials, then injects the Provider `api_key` ([ADR-0015](adr/0015-header-allowlist.md)). Passthrough copies response headers minus hop-by-hop and `Set-Cookie`; Conversion synthesizes `Content-Type`. Client query is kept only on Passthrough; Conversion adds `?alt=sse` only for Gemini streams. The hop honors `HTTP_PROXY` / `HTTPS_PROXY` ([ADR-0012](adr/0012-honor-proxy-environment.md)). Client disconnect cancels the upstream request ([ADR-0011](adr/0011-client-disconnect-cancels-upstream.md)).
 
 ## Conversion
 

@@ -23,7 +23,7 @@ npm install -g @thomas-huang/caosi
 caosi --version
 ```
 
-Needs Node.js 18+ on macOS, Linux, or Windows (amd64). The npm package includes native binaries; there is no install script and nothing is fetched from GitHub at install time.
+Needs Node.js 18+ on macOS or Linux (amd64 and arm64), or Windows (amd64). The npm package includes native binaries; there is no install script and nothing is fetched from GitHub at install time.
 
 ## Run
 
@@ -89,15 +89,18 @@ export GEMINI_API_BASE=http://127.0.0.1:9999/openrouter
 | `claude_messages` | Claude Messages |
 | `gemini` | Gemini generateContent |
 
-- `model` is optional: when set, it replaces the client's model name on the upstream request.
+- `model` is optional: when set, it replaces the client's model name on the upstream request, including when the protocols already match.
 - `headers` is optional extra request headers (for example OpenRouter).
 - `base_url` is a prefix. caosi does not strip `/v1`. Use the root the upstream actually expects (`https://openrouter.ai/api`, not `https://openrouter.ai/api/v1`).
+
+Same protocol is copied through. Different protocols remap the body: text, system instruction, tools, thinking, and in-message images, documents, audio, and video are kept when the other protocol can express them; otherwise that part is dropped and the rest is sent. caosi does not fetch URLs or Files API objects (`file_id`, `fileUri`). Dedicated image, files, audio, video, and embeddings paths stay 404.
 
 ## Listen, health, reload
 
 - Loopback only: `127.0.0.1` (or `::1` via `--listen`). Default port `9999` (`--port`).
-- `GET /health`
+- `GET /health` returns JSON with the current Provider Names.
 - Saving `providers.jsonc` hot-reloads; a bad file keeps the last good config.
+- Request and JSON-response bodies over 32MiB are rejected (413).
 - Flags: `--config-dir`, `--port`, `--listen`, `--log-level`, `--version`.
 
 ## What it does not do
