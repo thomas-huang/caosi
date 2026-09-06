@@ -8,7 +8,7 @@ import (
 	"io"
 )
 
-func OpenAIChatStreamToResponses(r io.Reader, w io.Writer) error {
+func openAIChatStreamToResponses(r io.Reader, w io.Writer) error {
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
 	st := &respStreamState{id: "resp_caosi"}
@@ -129,7 +129,7 @@ func writeResponsesEvent(w io.Writer, event string, data []byte) error {
 	return err
 }
 
-func OpenAIChatStreamToGemini(r io.Reader, w io.Writer) error {
+func openAIChatStreamToGemini(r io.Reader, w io.Writer) error {
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
 	var text, think string
@@ -158,7 +158,7 @@ func OpenAIChatStreamToGemini(r io.Reader, w io.Writer) error {
 				}
 			}
 		}
-		chunk, _ := ChatToGeminiResponse([]byte(`{"choices":[{"message":{"role":"assistant","content":` + jsonString(text) + `,"reasoning_content":` + jsonString(think) + `},"finish_reason":"stop"}]}`))
+		chunk, _ := chatToGeminiResponse([]byte(`{"choices":[{"message":{"role":"assistant","content":` + jsonString(text) + `,"reasoning_content":` + jsonString(think) + `},"finish_reason":"stop"}]}`))
 		if _, err := fmt.Fprintf(w, "data: %s\n\n", chunk); err != nil {
 			return err
 		}

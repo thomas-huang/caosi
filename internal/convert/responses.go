@@ -56,7 +56,7 @@ type responsesOut struct {
 	Summary json.RawMessage `json:"summary,omitempty"`
 }
 
-func ResponsesToChat(body []byte, model string, stream bool) ([]byte, error) {
+func responsesToChat(body []byte, model string, stream bool) ([]byte, error) {
 	var in responsesReq
 	if err := json.Unmarshal(body, &in); err != nil {
 		return nil, fmt.Errorf("Responses 请求不是合法 JSON: %w", err)
@@ -188,7 +188,7 @@ func responsesContentToChat(raw json.RawMessage) any {
 	return text.String()
 }
 
-func ChatToResponses(body []byte, model string, stream bool) ([]byte, error) {
+func chatToResponses(body []byte, model string, stream bool) ([]byte, error) {
 	var in openaiChatReq
 	if err := json.Unmarshal(body, &in); err != nil {
 		return nil, fmt.Errorf("Chat 请求不是合法 JSON: %w", err)
@@ -321,7 +321,7 @@ func chatContentToResponses(content any, role string) any {
 	}
 }
 
-func ResponsesToChatResponse(body []byte) ([]byte, error) {
+func responsesToChatResponse(body []byte) ([]byte, error) {
 	var in responsesResp
 	if err := json.Unmarshal(body, &in); err != nil {
 		return nil, fmt.Errorf("Responses 响应不是合法 JSON: %w", err)
@@ -374,7 +374,7 @@ func ResponsesToChatResponse(body []byte) ([]byte, error) {
 	return json.Marshal(m)
 }
 
-func ChatToResponsesResponse(body []byte) ([]byte, error) {
+func chatToResponsesResponse(body []byte) ([]byte, error) {
 	var in openaiChatResp
 	if err := json.Unmarshal(body, &in); err != nil {
 		return nil, err
@@ -422,14 +422,6 @@ func ChatToResponsesResponse(body []byte) ([]byte, error) {
 		}
 	}
 	return json.Marshal(out)
-}
-
-func ClaudeToResponses(body []byte, model string, stream bool) ([]byte, error) {
-	chat, err := ClaudeToOpenAIChat(body, model, stream)
-	if err != nil {
-		return nil, err
-	}
-	return ChatToResponses(chat, model, stream)
 }
 
 func responsesOutputText(raw json.RawMessage) string {

@@ -8,14 +8,14 @@ import (
 	"github.com/thomas-huang/caosi/internal/config"
 )
 
-func TestClaudeToOpenAIChat_TextAndSystem(t *testing.T) {
+func TestRequest_ClaudeToChat_TextAndSystem(t *testing.T) {
 	in := []byte(`{
 	  "model": "claude-opus",
 	  "max_tokens": 128,
 	  "system": "be brief",
 	  "messages": [{"role":"user","content":"hi"}]
 	}`)
-	out, err := ClaudeToOpenAIChat(in, "deepseek-chat", false)
+	out, err := Request(config.ProtocolClaudeMessages, config.ProtocolOpenAIChat, in, "deepseek-chat", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,14 +40,14 @@ func TestClaudeToOpenAIChat_TextAndSystem(t *testing.T) {
 	}
 }
 
-func TestClaudeToOpenAIChat_Tools(t *testing.T) {
+func TestRequest_ClaudeToChat_Tools(t *testing.T) {
 	in := []byte(`{
 	  "model": "claude-opus",
 	  "max_tokens": 32,
 	  "messages": [{"role":"user","content":"weather"}],
 	  "tools": [{"name":"get_weather","description":"w","input_schema":{"type":"object","properties":{"city":{"type":"string"}}}}]
 	}`)
-	out, err := ClaudeToOpenAIChat(in, "", false)
+	out, err := Request(config.ProtocolClaudeMessages, config.ProtocolOpenAIChat, in, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,14 +59,14 @@ func TestClaudeToOpenAIChat_Tools(t *testing.T) {
 	}
 }
 
-func TestOpenAIChatToClaude_Text(t *testing.T) {
+func TestResponse_ChatToClaude_Text(t *testing.T) {
 	in := []byte(`{
 	  "id": "chatcmpl-1",
 	  "model": "deepseek-chat",
 	  "choices": [{"index":0,"message":{"role":"assistant","content":"hello"},"finish_reason":"stop"}],
 	  "usage": {"prompt_tokens": 3, "completion_tokens": 1}
 	}`)
-	out, err := OpenAIChatToClaude(in)
+	out, err := Response(config.ProtocolClaudeMessages, config.ProtocolOpenAIChat, in)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,9 +87,9 @@ func TestOpenAIChatToClaude_Text(t *testing.T) {
 	}
 }
 
-func TestOpenAIChatToClaude_ErrorBody(t *testing.T) {
+func TestResponse_ChatToClaude_ErrorBody(t *testing.T) {
 	in := []byte(`{"error":{"message":"quota","type":"insufficient_quota"}}`)
-	out, err := OpenAIChatToClaude(in)
+	out, err := Response(config.ProtocolClaudeMessages, config.ProtocolOpenAIChat, in)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func TestPassthroughApplyModel(t *testing.T) {
 	}
 }
 
-func TestClaudeToOpenAIChat_ToolResult(t *testing.T) {
+func TestRequest_ClaudeToChat_ToolResult(t *testing.T) {
 	in := []byte(`{
 	  "model": "claude-opus",
 	  "max_tokens": 32,
@@ -125,7 +125,7 @@ func TestClaudeToOpenAIChat_ToolResult(t *testing.T) {
 	    {"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"ok"}]}
 	  ]
 	}`)
-	out, err := ClaudeToOpenAIChat(in, "", false)
+	out, err := Request(config.ProtocolClaudeMessages, config.ProtocolOpenAIChat, in, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,9 +138,9 @@ func TestClaudeToOpenAIChat_ToolResult(t *testing.T) {
 	}
 }
 
-func TestOpenAIChatToClaude_ThinkingField(t *testing.T) {
+func TestResponse_ChatToClaude_ThinkingField(t *testing.T) {
 	in := []byte(`{"choices":[{"message":{"role":"assistant","content":"hi","reasoning_content":"hmm"},"finish_reason":"stop"}]}`)
-	out, err := OpenAIChatToClaude(in)
+	out, err := Response(config.ProtocolClaudeMessages, config.ProtocolOpenAIChat, in)
 	if err != nil {
 		t.Fatal(err)
 	}

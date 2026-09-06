@@ -117,7 +117,7 @@ go install github.com/thomas-huang/caosi/cmd/caosi@latest
 go test ./...
 ```
 
-Domain language: [CONTEXT.md](CONTEXT.md). Decisions: [docs/adr](docs/adr).
+Domain language: [CONTEXT.md](CONTEXT.md). Architecture: [docs/architecture.md](docs/architecture.md). Decisions: [docs/adr](docs/adr).
 
 To cut a release, push a tag `vX.Y.Z`. GitHub Actions builds the five binaries, writes checksums, creates the Release, and publishes `@thomas-huang/caosi` to npm with GitHub OIDC trusted publishing (no access token).
 

@@ -117,7 +117,7 @@ go install github.com/thomas-huang/caosi/cmd/caosi@latest
 go test ./...
 ```
 
-领域用语：[CONTEXT.md](CONTEXT.md)。决定：[docs/adr](docs/adr)。
+领域用语：[CONTEXT.md](CONTEXT.md)。架构：[docs/architecture.md](docs/architecture.md)。决定：[docs/adr](docs/adr)。
 
 发版：推 tag `vX.Y.Z`。GitHub Actions 会编五个二进制、写 checksum、建 Release，并用 GitHub OIDC Trusted Publishing 把 `@thomas-huang/caosi` 发到 npm（不用 access token）。
 

@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-func OpenAIChatToClaudeRequest(body []byte, model string, stream bool) ([]byte, error) {
+func openAIChatToClaudeRequest(body []byte, model string, stream bool) ([]byte, error) {
 	var in openaiChatReq
 	if err := json.Unmarshal(body, &in); err != nil {
 		return nil, fmt.Errorf("Chat 请求不是合法 JSON: %w", err)
@@ -142,7 +142,7 @@ func chatContentToClaudeBlocks(content any) []any {
 	return blocks
 }
 
-func ClaudeToChatResponse(body []byte) ([]byte, error) {
+func claudeToChatResponse(body []byte) ([]byte, error) {
 	var in claudeResp
 	if err := json.Unmarshal(body, &in); err != nil {
 		return nil, fmt.Errorf("Claude 响应不是合法 JSON: %w", err)

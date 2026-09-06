@@ -78,7 +78,7 @@ type geminiResp struct {
 	} `json:"error"`
 }
 
-func GeminiToOpenAIChat(body []byte, model string, stream bool) ([]byte, error) {
+func geminiToOpenAIChat(body []byte, model string, stream bool) ([]byte, error) {
 	var in geminiReq
 	if err := json.Unmarshal(body, &in); err != nil {
 		return nil, fmt.Errorf("Gemini 请求不是合法 JSON: %w", err)
@@ -220,7 +220,7 @@ func geminiPartsText(parts []geminiPart, includeThought bool) string {
 	return b.String()
 }
 
-func OpenAIChatToGemini(body []byte, model string, stream bool) ([]byte, error) {
+func openAIChatToGemini(body []byte, model string, stream bool) ([]byte, error) {
 	var in openaiChatReq
 	if err := json.Unmarshal(body, &in); err != nil {
 		return nil, fmt.Errorf("Chat 请求不是合法 JSON: %w", err)
@@ -331,7 +331,7 @@ func splitDataURL(url string) (mime, data string) {
 	return rest[:i], rest[i+len(";base64,"):]
 }
 
-func GeminiToChatResponse(body []byte) ([]byte, error) {
+func geminiToChatResponse(body []byte) ([]byte, error) {
 	var in geminiResp
 	if err := json.Unmarshal(body, &in); err != nil {
 		return nil, fmt.Errorf("Gemini 响应不是合法 JSON: %w", err)
@@ -404,7 +404,7 @@ func GeminiToChatResponse(body []byte) ([]byte, error) {
 	return raw, nil
 }
 
-func ChatToGeminiResponse(body []byte) ([]byte, error) {
+func chatToGeminiResponse(body []byte) ([]byte, error) {
 	var in openaiChatResp
 	if err := json.Unmarshal(body, &in); err != nil {
 		return nil, err
@@ -438,14 +438,6 @@ func ChatToGeminiResponse(body []byte) ([]byte, error) {
 		}
 	}
 	return json.Marshal(out)
-}
-
-func GeminiToResponses(body []byte, model string, stream bool) ([]byte, error) {
-	chat, err := GeminiToOpenAIChat(body, model, stream)
-	if err != nil {
-		return nil, err
-	}
-	return ChatToResponses(chat, model, stream)
 }
 
 func mustJSON(v any) []byte {

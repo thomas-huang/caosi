@@ -10,10 +10,10 @@ import (
 	"github.com/thomas-huang/caosi/internal/config"
 )
 
-// ResponsesStreamToClaude converts OpenAI Responses SSE into Claude Messages SSE
+// responsesStreamToClaude converts OpenAI Responses SSE into Claude Messages SSE
 // as events arrive. A complete Responses JSON body (no SSE) still becomes a
 // legal one-shot Claude stream.
-func ResponsesStreamToClaude(r io.Reader, w io.Writer) error {
+func responsesStreamToClaude(r io.Reader, w io.Writer) error {
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
 	st := &respToClaudeState{id: "msg_caosi"}
@@ -120,7 +120,7 @@ func (s *respToClaudeState) feed(typ string, m map[string]json.RawMessage, w io.
 				errType = e.Type
 			}
 		}
-		b, _ := ClaudeError(errType, msg)
+		b, _ := encodeClaudeError(errType, msg)
 		return writeSSE(w, "error", b)
 	}
 

@@ -11,7 +11,7 @@ import (
 	"github.com/thomas-huang/caosi/internal/config"
 )
 
-func TestOpenAIChatStreamToClaude_TextChunks(t *testing.T) {
+func TestStream_ChatToClaude_TextChunks(t *testing.T) {
 	in := strings.Join([]string{
 		`data: {"id":"chatcmpl-1","model":"m","choices":[{"index":0,"delta":{"role":"assistant","content":"hel"}}]}`,
 		``,
@@ -23,7 +23,7 @@ func TestOpenAIChatStreamToClaude_TextChunks(t *testing.T) {
 		``,
 	}, "\n")
 	var out bytes.Buffer
-	if err := OpenAIChatStreamToClaude(strings.NewReader(in), &out); err != nil {
+	if err := Stream(config.ProtocolClaudeMessages, config.ProtocolOpenAIChat, strings.NewReader(in), &out); err != nil {
 		t.Fatal(err)
 	}
 	s := out.String()
@@ -62,19 +62,10 @@ func TestStream_ClaudeUpstreamSSEAssemblesText(t *testing.T) {
 	}
 }
 
-func TestWriteClaudeOneShotSSE_LegalEventSequence(t *testing.T) {
-	in := []byte(`{
-	  "id":"msg_1","type":"message","role":"assistant","model":"glm-5.3",
-	  "content":[
-	    {"type":"thinking","thinking":"hmm"},
-	    {"type":"text","text":"ok"},
-	    {"type":"tool_use","id":"toolu_1","name":"read_file","input":{"path":"README.md"}}
-	  ],
-	  "stop_reason":"tool_use",
-	  "usage":{"input_tokens":9,"output_tokens":4}
-	}`)
+func TestStream_ClaudeFromGeminiJSON_ThinkingTextAndTool(t *testing.T) {
+	in := `{"candidates":[{"content":{"role":"model","parts":[{"thought":true,"text":"hmm"},{"text":"ok"},{"functionCall":{"name":"read_file","args":{"path":"README.md"}}}]},"finishReason":"STOP"}]}`
 	var out bytes.Buffer
-	if err := writeClaudeOneShotSSE(&out, in); err != nil {
+	if err := Stream(config.ProtocolClaudeMessages, config.ProtocolGemini, strings.NewReader(in), &out); err != nil {
 		t.Fatal(err)
 	}
 	s := out.String()
@@ -453,7 +444,7 @@ func TestStream_ClaudeFromGeminiJSON_LegalSSE(t *testing.T) {
 	}
 }
 
-func TestOpenAIChatStreamToResponses_IncludesReasoning(t *testing.T) {
+func TestStream_ChatToResponses_IncludesReasoning(t *testing.T) {
 	in := strings.Join([]string{
 		`data: {"id":"chatcmpl-1","choices":[{"delta":{"reasoning_content":"think"}}]}`,
 		``,
@@ -463,7 +454,7 @@ func TestOpenAIChatStreamToResponses_IncludesReasoning(t *testing.T) {
 		``,
 	}, "\n")
 	var out bytes.Buffer
-	if err := OpenAIChatStreamToResponses(strings.NewReader(in), &out); err != nil {
+	if err := Stream(config.ProtocolOpenAIResponses, config.ProtocolOpenAIChat, strings.NewReader(in), &out); err != nil {
 		t.Fatal(err)
 	}
 	s := out.String()

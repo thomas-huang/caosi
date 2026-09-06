@@ -114,7 +114,7 @@ type openaiImgURL struct {
 	URL string `json:"url"`
 }
 
-func ClaudeToOpenAIChat(body []byte, model string, stream bool) ([]byte, error) {
+func claudeToOpenAIChat(body []byte, model string, stream bool) ([]byte, error) {
 	var in claudeReq
 	if err := json.Unmarshal(body, &in); err != nil {
 		return nil, fmt.Errorf("Claude 请求不是合法 JSON: %w", err)
@@ -395,13 +395,13 @@ type claudeError struct {
 	} `json:"error"`
 }
 
-func OpenAIChatToClaude(body []byte) ([]byte, error) {
+func openAIChatToClaude(body []byte) ([]byte, error) {
 	var in openaiChatResp
 	if err := json.Unmarshal(body, &in); err != nil {
 		return nil, fmt.Errorf("OpenAI 响应不是合法 JSON: %w", err)
 	}
 	if in.Error != nil && in.Error.Message != "" {
-		return ClaudeError(in.Error.Type, in.Error.Message)
+		return encodeClaudeError(in.Error.Type, in.Error.Message)
 	}
 	out := claudeResp{
 		ID:    in.ID,
@@ -466,7 +466,7 @@ func mapFinishReason(r string) string {
 	}
 }
 
-func ClaudeError(typ, msg string) ([]byte, error) {
+func encodeClaudeError(typ, msg string) ([]byte, error) {
 	if typ == "" {
 		typ = "api_error"
 	}
@@ -477,7 +477,7 @@ func ClaudeError(typ, msg string) ([]byte, error) {
 	return json.Marshal(e)
 }
 
-func OpenAIError(msg string) []byte {
+func encodeOpenAIError(msg string) []byte {
 	b, _ := json.Marshal(map[string]any{
 		"error": map[string]any{
 			"message": msg,
@@ -487,7 +487,7 @@ func OpenAIError(msg string) []byte {
 	return b
 }
 
-func GeminiError(msg string, code int) []byte {
+func encodeGeminiError(msg string, code int) []byte {
 	status := "INVALID_ARGUMENT"
 	if code >= 500 {
 		status = "INTERNAL"
@@ -505,14 +505,14 @@ func GeminiError(msg string, code int) []byte {
 func ClientError(client config.Protocol, status int, msg string) (int, []byte, string) {
 	switch client {
 	case config.ProtocolClaudeMessages:
-		b, _ := ClaudeError("invalid_request_error", msg)
+		b, _ := encodeClaudeError("invalid_request_error", msg)
 		return status, b, "application/json"
 	case config.ProtocolGemini:
 		if status < 400 {
 			status = 400
 		}
-		return status, GeminiError(msg, status), "application/json"
+		return status, encodeGeminiError(msg, status), "application/json"
 	default:
-		return status, OpenAIError(msg), "application/json"
+		return status, encodeOpenAIError(msg), "application/json"
 	}
 }

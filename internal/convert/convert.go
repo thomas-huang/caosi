@@ -50,13 +50,6 @@ func Request(client, upstream config.Protocol, body []byte, model string, stream
 	if client == upstream {
 		return applyModel(body, model)
 	}
-	// First-party cells CPA lacks: Claude/Gemini → Responses.
-	if client == config.ProtocolClaudeMessages && upstream == config.ProtocolOpenAIResponses {
-		return ClaudeToResponses(body, model, stream)
-	}
-	if client == config.ProtocolGemini && upstream == config.ProtocolOpenAIResponses {
-		return GeminiToResponses(body, model, stream)
-	}
 	chat, err := toChatRequest(client, body, model, stream)
 	if err != nil {
 		return nil, err
@@ -84,16 +77,16 @@ func Stream(client, upstream config.Protocol, r io.Reader, w io.Writer) error {
 		return err
 	}
 	if client == config.ProtocolClaudeMessages && upstream == config.ProtocolOpenAIChat {
-		return OpenAIChatStreamToClaude(r, w)
+		return openAIChatStreamToClaude(r, w)
 	}
 	if client == config.ProtocolClaudeMessages && upstream == config.ProtocolOpenAIResponses {
-		return ResponsesStreamToClaude(r, w)
+		return responsesStreamToClaude(r, w)
 	}
 	if client == config.ProtocolOpenAIResponses && upstream == config.ProtocolOpenAIChat {
-		return OpenAIChatStreamToResponses(r, w)
+		return openAIChatStreamToResponses(r, w)
 	}
 	if client == config.ProtocolGemini && upstream == config.ProtocolOpenAIChat {
-		return OpenAIChatStreamToGemini(r, w)
+		return openAIChatStreamToGemini(r, w)
 	}
 	// Remaining stream pairs: buffer upstream SSE/JSON, convert as a full response, emit client SSE or JSON.
 	raw, err := io.ReadAll(r)
@@ -125,11 +118,11 @@ func toChatRequest(p config.Protocol, body []byte, model string, stream bool) ([
 	case config.ProtocolOpenAIChat:
 		return applyModel(body, model)
 	case config.ProtocolOpenAIResponses:
-		return ResponsesToChat(body, model, stream)
+		return responsesToChat(body, model, stream)
 	case config.ProtocolClaudeMessages:
-		return ClaudeToOpenAIChat(body, model, stream)
+		return claudeToOpenAIChat(body, model, stream)
 	case config.ProtocolGemini:
-		return GeminiToOpenAIChat(body, model, stream)
+		return geminiToOpenAIChat(body, model, stream)
 	default:
 		return nil, fmt.Errorf("未知 Client Protocol %s", p)
 	}
@@ -140,11 +133,11 @@ func fromChatRequest(p config.Protocol, chat []byte, model string, stream bool) 
 	case config.ProtocolOpenAIChat:
 		return applyModel(chat, model)
 	case config.ProtocolOpenAIResponses:
-		return ChatToResponses(chat, model, stream)
+		return chatToResponses(chat, model, stream)
 	case config.ProtocolClaudeMessages:
-		return OpenAIChatToClaudeRequest(chat, model, stream)
+		return openAIChatToClaudeRequest(chat, model, stream)
 	case config.ProtocolGemini:
-		return OpenAIChatToGemini(chat, model, stream)
+		return openAIChatToGemini(chat, model, stream)
 	default:
 		return nil, fmt.Errorf("未知 Upstream Protocol %s", p)
 	}
@@ -155,11 +148,11 @@ func toChatResponse(p config.Protocol, body []byte) ([]byte, error) {
 	case config.ProtocolOpenAIChat:
 		return body, nil
 	case config.ProtocolOpenAIResponses:
-		return ResponsesToChatResponse(body)
+		return responsesToChatResponse(body)
 	case config.ProtocolClaudeMessages:
-		return ClaudeToChatResponse(body)
+		return claudeToChatResponse(body)
 	case config.ProtocolGemini:
-		return GeminiToChatResponse(body)
+		return geminiToChatResponse(body)
 	default:
 		return nil, fmt.Errorf("未知 Upstream Protocol %s", p)
 	}
@@ -170,11 +163,11 @@ func fromChatResponse(p config.Protocol, chat []byte) ([]byte, error) {
 	case config.ProtocolOpenAIChat:
 		return chat, nil
 	case config.ProtocolOpenAIResponses:
-		return ChatToResponsesResponse(chat)
+		return chatToResponsesResponse(chat)
 	case config.ProtocolClaudeMessages:
-		return OpenAIChatToClaude(chat)
+		return openAIChatToClaude(chat)
 	case config.ProtocolGemini:
-		return ChatToGeminiResponse(chat)
+		return chatToGeminiResponse(chat)
 	default:
 		return nil, fmt.Errorf("未知 Client Protocol %s", p)
 	}
@@ -246,7 +239,7 @@ func translateError(client config.Protocol, body []byte) ([]byte, error) {
 	}
 	_, b, _ := ClientError(client, 400, msg)
 	if client == config.ProtocolClaudeMessages {
-		return ClaudeError(typ, msg)
+		return encodeClaudeError(typ, msg)
 	}
 	return b, nil
 }

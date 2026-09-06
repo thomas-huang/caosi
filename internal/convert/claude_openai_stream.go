@@ -8,8 +8,8 @@ import (
 	"io"
 )
 
-// OpenAIChatStreamToClaude reads OpenAI Chat Completions SSE and writes Claude Messages SSE.
-func OpenAIChatStreamToClaude(r io.Reader, w io.Writer) error {
+// openAIChatStreamToClaude reads OpenAI Chat Completions SSE and writes Claude Messages SSE.
+func openAIChatStreamToClaude(r io.Reader, w io.Writer) error {
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
 	st := &claudeStreamState{id: "msg_caosi"}
@@ -55,7 +55,7 @@ func (s *claudeStreamState) feed(raw []byte, w io.Writer) error {
 		return nil
 	}
 	if chunk.Error != nil && chunk.Error.Message != "" {
-		b, _ := ClaudeError(chunk.Error.Type, chunk.Error.Message)
+		b, _ := encodeClaudeError(chunk.Error.Type, chunk.Error.Message)
 		return writeSSE(w, "error", b)
 	}
 	if chunk.ID != "" {
