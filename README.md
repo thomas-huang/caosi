@@ -4,9 +4,9 @@
 
 Keep using Claude Code, Codex, or Gemini CLI. Point them at your own upstream — no client switch.
 
-Set the Base URL to `http://127.0.0.1:9999/{provider_name}`. Same protocol is passed through; caosi converts when they differ.
+Set the Base URL to `http://127.0.0.1:9999/{provider_name}`. OpenAI Chat, OpenAI Responses, Claude Messages, and Gemini convert in every direction; same protocol is passed through.
 
-- A single static binary
+- A single static binary. No Docker.
 - npm ships the binaries: no install script, nothing fetched from GitHub
 - macOS, Linux, and Windows
 

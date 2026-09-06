@@ -4,9 +4,9 @@
 
 不换 Claude Code、Codex 或 Gemini CLI。把它们指到你自己的上游，不必换客户端。
 
-把 Base URL 设成 `http://127.0.0.1:9999/{provider_name}`。协议相同就直通，不同就由 caosi 转。
+把 Base URL 设成 `http://127.0.0.1:9999/{provider_name}`。OpenAI Chat、OpenAI Responses、Claude Messages、Gemini 任意两两互转；协议相同就直通。
 
-- 一个静态二进制
+- 一个静态二进制。不需要 Docker。
 - npm 包自带各平台二进制：安装不跑脚本，也不访问 GitHub
 - macOS、Linux、Windows
 
