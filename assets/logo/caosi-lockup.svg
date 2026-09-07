@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 268 96" fill="none" role="img" aria-label="caosi">
+  <g transform="translate(-6 0) scale(.75)">
+    <path d="M87.269 34.124A39 39 0 1 0 87.269 93.876" stroke="#0A0A0A" stroke-width="13" stroke-linecap="round"/>
+    <polygon fill="#0A0A0A" points="59.8,47.2 56.795,60.995 43,64 56.795,67.005 59.8,80.8 62.805,67.005 76.6,64 62.805,60.995"/>
+  </g>
+  <text x="92" y="50" fill="#0A0A0A" font-family="Avenir Next, Inter, Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="38" font-weight="600" letter-spacing="1.2" dominant-baseline="middle">caosi</text>
+</svg>

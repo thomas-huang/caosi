@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo/caosi-icon.svg" width="88" height="88" alt="caosi">
+</p>
+
 # caosi
 
 [English](README.md)

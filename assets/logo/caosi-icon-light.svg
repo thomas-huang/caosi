@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none" role="img" aria-label="caosi">
+  <rect width="128" height="128" rx="28" fill="#F3F3F1"/>
+  <g transform="translate(64 64) scale(.84) translate(-64 -64)">
+    <path d="M87.269 34.124A39 39 0 1 0 87.269 93.876" stroke="#0A0A0A" stroke-width="13" stroke-linecap="round"/>
+    <polygon fill="#0A0A0A" points="59.8,47.2 56.795,60.995 43,64 56.795,67.005 59.8,80.8 62.805,67.005 76.6,64 62.805,60.995"/>
+  </g>
+</svg>
