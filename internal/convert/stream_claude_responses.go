@@ -170,6 +170,15 @@ func (s *respToClaudeState) feed(typ string, m map[string]json.RawMessage, w io.
 			return err
 		}
 		return s.emitThinking(w, eventDelta(m))
+	case strings.Contains(typ, "encrypted_content"):
+		if err := s.ensureStart(w); err != nil {
+			return err
+		}
+		sig := eventDelta(m)
+		if sig == "" {
+			sig = rawString(m["encrypted_content"])
+		}
+		return s.emitSignature(w, sig)
 	case typ == "response.output_item.added":
 		if err := s.ensureStart(w); err != nil {
 			return err
@@ -279,30 +288,53 @@ func (s *respToClaudeState) ensureStart(w io.Writer) error {
 	return writeSSE(w, "message_start", b)
 }
 
+func (s *respToClaudeState) ensureThinking(w io.Writer) error {
+	if s.thinkingStart {
+		return nil
+	}
+	s.thinkingStart = true
+	s.thinkIdx = s.nextIndex
+	s.nextIndex++
+	b, err := json.Marshal(map[string]any{
+		"type":          "content_block_start",
+		"index":         s.thinkIdx,
+		"content_block": map[string]any{"type": "thinking", "thinking": ""},
+	})
+	if err != nil {
+		return err
+	}
+	return writeSSE(w, "content_block_start", b)
+}
+
 func (s *respToClaudeState) emitThinking(w io.Writer, delta string) error {
 	if delta == "" {
 		return nil
 	}
-	if !s.thinkingStart {
-		s.thinkingStart = true
-		s.thinkIdx = s.nextIndex
-		s.nextIndex++
-		b, err := json.Marshal(map[string]any{
-			"type":          "content_block_start",
-			"index":         s.thinkIdx,
-			"content_block": map[string]any{"type": "thinking", "thinking": ""},
-		})
-		if err != nil {
-			return err
-		}
-		if err := writeSSE(w, "content_block_start", b); err != nil {
-			return err
-		}
+	if err := s.ensureThinking(w); err != nil {
+		return err
 	}
 	b, err := json.Marshal(map[string]any{
 		"type":  "content_block_delta",
 		"index": s.thinkIdx,
 		"delta": map[string]any{"type": "thinking_delta", "thinking": delta},
+	})
+	if err != nil {
+		return err
+	}
+	return writeSSE(w, "content_block_delta", b)
+}
+
+func (s *respToClaudeState) emitSignature(w io.Writer, sig string) error {
+	if sig == "" {
+		return nil
+	}
+	if err := s.ensureThinking(w); err != nil {
+		return err
+	}
+	b, err := json.Marshal(map[string]any{
+		"type":  "content_block_delta",
+		"index": s.thinkIdx,
+		"delta": map[string]any{"type": "signature_delta", "signature": sig},
 	})
 	if err != nil {
 		return err
@@ -349,7 +381,10 @@ func (s *respToClaudeState) handleItemAdded(m map[string]json.RawMessage, w io.W
 	typ := strings.Trim(string(item["type"]), `"`)
 	if typ == "reasoning" {
 		text := responsesOutputText(item["summary"]) + responsesOutputText(item["content"])
-		return s.emitThinking(w, text)
+		if err := s.emitThinking(w, text); err != nil {
+			return err
+		}
+		return s.emitSignature(w, rawString(item["encrypted_content"]))
 	}
 	if typ != "function_call" && typ != "custom_tool_call" {
 		return nil

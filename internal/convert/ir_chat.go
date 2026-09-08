@@ -147,14 +147,18 @@ func chatMapToIRPart(m map[string]any) (irPart, bool) {
 		}
 		data, _ := audio["data"].(string)
 		format, _ := audio["format"].(string)
-		if data == "" {
-			return irPart{}, false
-		}
+		url, _ := audio["url"].(string)
 		mime := mimeFromAudioFormat(format)
-		if mime == "" {
+		if mime == "" && data != "" {
 			mime = "audio/mpeg"
 		}
-		return irPart{Kind: irKindAudio, Data: data, AudioFmt: strings.ToLower(format), MIME: mime}, true
+		if data != "" {
+			return irPart{Kind: irKindAudio, Data: data, AudioFmt: strings.ToLower(format), MIME: mime}, true
+		}
+		if isHTTPURL(url) {
+			return irPart{Kind: irKindAudio, URL: url, AudioFmt: strings.ToLower(format), MIME: mime}, true
+		}
+		return irPart{}, false
 	case "video_url":
 		url := ""
 		if vu, ok := m["video_url"].(map[string]any); ok {
@@ -348,6 +352,12 @@ func chatToIRResponse(body []byte) (irResponse, error) {
 	if in.Usage != nil {
 		out.PromptTokens = in.Usage.PromptTokens
 		out.CompletionTokens = in.Usage.CompletionTokens
+		if in.Usage.PromptTokensDetails != nil {
+			out.CacheReadTokens = in.Usage.PromptTokensDetails.CachedTokens
+		}
+		if in.Usage.CompletionTokensDetails != nil {
+			out.ReasoningTokens = in.Usage.CompletionTokensDetails.ReasoningTokens
+		}
 	}
 	if len(in.Choices) == 0 {
 		out.FinishReason = "stop"
@@ -425,8 +435,15 @@ func irToChatResponse(ir irResponse) ([]byte, error) {
 			"message":       msg,
 		}},
 	}
-	if ir.PromptTokens != 0 || ir.CompletionTokens != 0 {
-		m["usage"] = map[string]int{"prompt_tokens": ir.PromptTokens, "completion_tokens": ir.CompletionTokens}
+	if ir.PromptTokens != 0 || ir.CompletionTokens != 0 || ir.ReasoningTokens != 0 || ir.CacheReadTokens != 0 {
+		usage := map[string]any{"prompt_tokens": ir.PromptTokens, "completion_tokens": ir.CompletionTokens}
+		if ir.CacheReadTokens != 0 {
+			usage["prompt_tokens_details"] = map[string]int{"cached_tokens": ir.CacheReadTokens}
+		}
+		if ir.ReasoningTokens != 0 {
+			usage["completion_tokens_details"] = map[string]int{"reasoning_tokens": ir.ReasoningTokens}
+		}
+		m["usage"] = usage
 	}
 	return json.Marshal(m)
 }

@@ -60,9 +60,9 @@ Passthrough without a Model Override copies the request body. `convert.Request` 
 
 ## Conversion
 
-The Conversion seam is `Request`, `Response`, `Stream`, plus `NeedsConvert`, `UpstreamPath`, `ModelFromBody`, `ClientError`. Cross-protocol remap is client/upstream ↔ IR ([ADR-0024](adr/0024-ir-is-not-openai-chat.md)). Incremental stream pairs stay as listed below and do not carry media.
+The Conversion seam is `Request`, `Response`, `Stream`, plus `NeedsConvert`, `UpstreamPath`, `ModelFromBody`, `ClientError`. Cross-protocol remap is client/upstream ↔ IR ([ADR-0024](adr/0024-ir-is-not-openai-chat.md)). Incremental stream pairs stay as listed below and do not carry media. Pairs that already emit thinking emit a Thinking Signature when present.
 
-Non-stream Conversion remaps through an in-process IR that can hold every Conversion Contract capability ([ADR-0024](adr/0024-ir-is-not-openai-chat.md), [ADR-0025](adr/0025-media-parts-in-the-conversion-contract.md)). OpenAI Chat is not that IR.
+Non-stream Conversion remaps through an in-process IR that can hold every Conversion Contract capability ([ADR-0024](adr/0024-ir-is-not-openai-chat.md), [ADR-0025](adr/0025-media-parts-in-the-conversion-contract.md), [ADR-0026](adr/0026-thinking-signature-is-a-carriage.md), [ADR-0027](adr/0027-usage-details-are-three-fields.md)). OpenAI Chat is not that IR.
 
 ```mermaid
 flowchart LR
@@ -75,7 +75,7 @@ flowchart LR
 
 The reverse path is `Response`: upstream body → IR → Client Protocol. Upstream errors become Client Protocol errors ([ADR-0008](adr/0008-errors-match-the-client-protocol.md)).
 
-An IR message is a role plus an ordered list of parts. A part is text, thinking, a tool call, a tool result, or an Image / Document / Audio / Video Part. Media parts carry a MIME type and either inline bytes or an http(s) URL — never a `file_id`. A part nested in a tool result is still that part.
+An IR message is a role plus an ordered list of parts. A part is text, thinking, a tool call, a tool result, or an Image / Document / Audio / Video Part. A thinking part may carry a Thinking Signature. Media parts carry a MIME type and either inline bytes or an http(s) URL — never a `file_id`. A part nested in a tool result is still that part. Usage Details ride on the response, not on a part.
 
 When the other protocol has an Analogue, Conversion remaps the part. When it does not, the part is dropped and the rest of the request is sent. Conversion does not fetch URLs, does not invent Chat fields such as `video_url`, and does not insert placeholder text.
 
@@ -105,7 +105,7 @@ flowchart TD
   INC -->|no| BUF --> R --> OUT
 ```
 
-Claude Messages ← OpenAI Responses stays incremental ([ADR-0020](adr/0020-claude-responses-stream-is-incremental.md)). Remaining pairs may buffer, then emit a legal Client Protocol stream.
+Claude Messages ← OpenAI Responses stays incremental ([ADR-0020](adr/0020-claude-responses-stream-is-incremental.md)). Remaining pairs may buffer, then emit a legal Client Protocol stream. Pairs that already emit thinking emit a Thinking Signature when present. Inflation is measured on content-bearing deltas, not lifecycle envelopes.
 
 ## Protocol grid
 
@@ -143,7 +143,7 @@ flowchart LR
   CG --> UG
 ```
 
-Same-protocol cells are Passthrough. Cross-protocol cells are Conversion. Conversion Contract: text, system instruction, tools, thinking/reasoning, Image Parts, Document Parts, Audio Parts, and Video Parts, when an Analogue exists.
+Same-protocol cells are Passthrough. Cross-protocol cells are Conversion. Conversion Contract: text, system instruction, tools, thinking/reasoning, Thinking Signature, Image Parts, Document Parts, Audio Parts, Video Parts, and Usage Details, when an Analogue exists. Keep/drop analogue tables (frozen): [next-version.md](next-version.md).
 
 ## Packages
 

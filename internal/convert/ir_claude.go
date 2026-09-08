@@ -101,8 +101,8 @@ func claudeMessageToIR(msg claudeMsg) []irMessage {
 			if t == "" {
 				t = bl.Text
 			}
-			if t != "" {
-				main.Parts = append(main.Parts, thinkingPart(t))
+			if t != "" || bl.Signature != "" {
+				main.Parts = append(main.Parts, irPart{Kind: irKindThinking, Text: t, Signature: bl.Signature})
 			}
 		}
 	}
@@ -246,8 +246,12 @@ func irPartsToClaudeBlocks(parts []irPart) []any {
 	for _, p := range parts {
 		switch p.Kind {
 		case irKindThinking:
-			if p.Text != "" {
-				blocks = append(blocks, map[string]any{"type": "thinking", "thinking": p.Text})
+			if p.Text != "" || p.Signature != "" {
+				b := map[string]any{"type": "thinking", "thinking": p.Text}
+				if p.Signature != "" {
+					b["signature"] = p.Signature
+				}
+				blocks = append(blocks, b)
 			}
 		case irKindText:
 			if p.Text != "" {
@@ -337,7 +341,14 @@ func claudeToIRResponse(body []byte) (irResponse, error) {
 	if err := json.Unmarshal(body, &in); err != nil {
 		return irResponse{}, fmt.Errorf("Claude 响应不是合法 JSON: %w", err)
 	}
-	out := irResponse{ID: in.ID, Model: in.Model, PromptTokens: in.Usage.InputTokens, CompletionTokens: in.Usage.OutputTokens}
+	out := irResponse{
+		ID:                in.ID,
+		Model:             in.Model,
+		PromptTokens:      in.Usage.InputTokens,
+		CompletionTokens:  in.Usage.OutputTokens,
+		CacheReadTokens:   in.Usage.CacheReadInputTokens,
+		CacheCreateTokens: in.Usage.CacheCreationInputTokens,
+	}
 	switch in.StopReason {
 	case "tool_use":
 		out.FinishReason = "tool_calls"
@@ -355,7 +366,7 @@ func claudeToIRResponse(body []byte) (irResponse, error) {
 			if t == "" {
 				t = b.Text
 			}
-			out.Parts = append(out.Parts, thinkingPart(t))
+			out.Parts = append(out.Parts, irPart{Kind: irKindThinking, Text: t, Signature: b.Signature})
 		case "tool_use":
 			args := string(b.Input)
 			if args == "" {
@@ -378,11 +389,13 @@ func irToClaudeResponse(ir irResponse) ([]byte, error) {
 	}
 	out.Usage.InputTokens = ir.PromptTokens
 	out.Usage.OutputTokens = ir.CompletionTokens
+	out.Usage.CacheReadInputTokens = ir.CacheReadTokens
+	out.Usage.CacheCreationInputTokens = ir.CacheCreateTokens
 	out.StopReason = mapFinishReason(ir.FinishReason)
 	for _, p := range ir.Parts {
 		switch p.Kind {
 		case irKindThinking:
-			out.Content = append(out.Content, claudeBlock{Type: "thinking", Thinking: p.Text})
+			out.Content = append(out.Content, claudeBlock{Type: "thinking", Thinking: p.Text, Signature: p.Signature})
 		case irKindText:
 			if p.Text != "" {
 				out.Content = append(out.Content, claudeBlock{Type: "text", Text: p.Text})

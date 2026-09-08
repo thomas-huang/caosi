@@ -97,7 +97,7 @@ export GEMINI_API_BASE=http://127.0.0.1:9999/openrouter
 - `headers` 可选，用来补 OpenRouter 之类的额外头。
 - `base_url` 是前缀。caosi 不会剥 `/v1`。写成上游真正要接的根（`https://openrouter.ai/api`，不要写成 `https://openrouter.ai/api/v1`）。
 
-协议相同就原样转发。协议不同会改写请求体：文本、系统指令、工具、思考，以及消息里的图片、文档、音频、视频，对端能表达就保留；不能表达的部分丢掉，其余照发。不会去拉取 URL，也不会走 Files API（`file_id`、`fileUri`）。独立的图片 / 文件 / 音频 / 视频 / embeddings 路径仍然是 404。
+协议相同就原样转发。协议不同会改写请求体：文本、系统指令、工具、思考、Thinking Signature，以及消息里的图片、文档、音频、视频，还有 Usage Details（reasoning / cache-read / cache-create 计数），对端能表达就保留；不能表达的部分丢掉，其余照发。不会去拉取 URL，也不会走 Files API（`file_id`、`fileUri`）。独立的图片 / 文件 / 音频 / 视频 / embeddings 路径仍然是 404。
 
 ## 监听、健康检查、热加载
 

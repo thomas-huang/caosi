@@ -20,11 +20,18 @@ type geminiContent struct {
 type geminiPart struct {
 	Text             string        `json:"text,omitempty"`
 	Thought          bool          `json:"thought,omitempty"`
+	ThoughtSignature string        `json:"thoughtSignature,omitempty"`
 	InlineData       *geminiBlob   `json:"inlineData,omitempty"`
 	InlineDataAlt    *geminiBlob   `json:"inline_data,omitempty"`
+	FileData         *geminiFile   `json:"fileData,omitempty"`
 	FunctionCall     *geminiFnCall `json:"functionCall,omitempty"`
 	FunctionCallAlt  *geminiFnCall `json:"function_call,omitempty"`
 	FunctionResponse *geminiFnResp `json:"functionResponse,omitempty"`
+}
+
+type geminiFile struct {
+	MimeType string `json:"mimeType"`
+	FileURI  string `json:"fileUri"`
 }
 
 type geminiBlob struct {
@@ -68,8 +75,10 @@ type geminiResp struct {
 		FinishReason string        `json:"finishReason"`
 	} `json:"candidates"`
 	UsageMetadata *struct {
-		PromptTokenCount     int `json:"promptTokenCount"`
-		CandidatesTokenCount int `json:"candidatesTokenCount"`
+		PromptTokenCount        int `json:"promptTokenCount"`
+		CandidatesTokenCount    int `json:"candidatesTokenCount"`
+		ThoughtsTokenCount      int `json:"thoughtsTokenCount,omitempty"`
+		CachedContentTokenCount int `json:"cachedContentTokenCount,omitempty"`
 	} `json:"usageMetadata"`
 	Error *struct {
 		Message string `json:"message"`

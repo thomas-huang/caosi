@@ -484,7 +484,21 @@ func writeClaudeOneShotBlock(w io.Writer, index int, block claudeBlock) error {
 		if err != nil {
 			return err
 		}
-		return writeSSE(w, "content_block_delta", delta)
+		if err := writeSSE(w, "content_block_delta", delta); err != nil {
+			return err
+		}
+		if block.Signature == "" {
+			return nil
+		}
+		sig, err := json.Marshal(map[string]any{
+			"type":  "content_block_delta",
+			"index": index,
+			"delta": map[string]any{"type": "signature_delta", "signature": block.Signature},
+		})
+		if err != nil {
+			return err
+		}
+		return writeSSE(w, "content_block_delta", sig)
 	case "tool_use":
 		start, err := json.Marshal(map[string]any{
 			"type":  "content_block_start",

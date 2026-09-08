@@ -94,6 +94,11 @@ func responsesInputToIR(raw json.RawMessage) []irMessage {
 				Parts:      []irPart{{Kind: irKindToolResult, ToolUseID: id, Nested: []irPart{textPart(text)}}},
 			})
 		case "reasoning":
+			text := responsesOutputText(it["summary"]) + responsesOutputText(it["content"])
+			sig := rawString(it["encrypted_content"])
+			if text != "" || sig != "" {
+				msgs = append(msgs, irMessage{Role: "assistant", Parts: []irPart{{Kind: irKindThinking, Text: text, Signature: sig}}})
+			}
 		}
 	}
 	return msgs
@@ -184,11 +189,15 @@ func irToResponsesRequest(ir irRequest) ([]byte, error) {
 			})
 		default:
 			rest, calls := splitIRToolCalls(msg.Parts)
-			if think := irThinking(rest); think != "" {
-				input = append(input, map[string]any{
+			if think := irThinking(rest); think != "" || irThinkingSignature(rest) != "" {
+				item := map[string]any{
 					"type":    "reasoning",
 					"summary": []any{map[string]any{"type": "summary_text", "text": think}},
-				})
+				}
+				if sig := irThinkingSignature(rest); sig != "" {
+					item["encrypted_content"] = sig
+				}
+				input = append(input, item)
 			}
 			if len(calls) > 0 {
 				for _, tc := range calls {
@@ -294,6 +303,12 @@ func responsesToIRResponse(body []byte) (irResponse, error) {
 	if in.Usage != nil {
 		out.PromptTokens = in.Usage.InputTokens
 		out.CompletionTokens = in.Usage.OutputTokens
+		if in.Usage.InputTokensDetails != nil {
+			out.CacheReadTokens = in.Usage.InputTokensDetails.CachedTokens
+		}
+		if in.Usage.OutputTokensDetails != nil {
+			out.ReasoningTokens = in.Usage.OutputTokensDetails.ReasoningTokens
+		}
 	}
 	for _, item := range in.Output {
 		switch item.Type {
@@ -313,8 +328,8 @@ func responsesToIRResponse(body []byte) (irResponse, error) {
 			out.FinishReason = "tool_calls"
 		case "reasoning":
 			t := responsesOutputText(item.Summary) + responsesOutputText(item.Content)
-			if t != "" {
-				out.Parts = append(out.Parts, thinkingPart(t))
+			if t != "" || item.EncryptedContent != "" {
+				out.Parts = append(out.Parts, irPart{Kind: irKindThinking, Text: t, Signature: item.EncryptedContent})
 			}
 		}
 	}
@@ -331,11 +346,15 @@ func irToResponsesResponse(ir irResponse) ([]byte, error) {
 	}
 	out := map[string]any{"id": id, "object": "response", "status": "completed", "model": ir.Model}
 	var output []any
-	if think := irThinking(ir.Parts); think != "" {
-		output = append(output, map[string]any{
+	if think := irThinking(ir.Parts); think != "" || irThinkingSignature(ir.Parts) != "" {
+		item := map[string]any{
 			"type":    "reasoning",
 			"summary": []map[string]any{{"type": "summary_text", "text": think}},
-		})
+		}
+		if sig := irThinkingSignature(ir.Parts); sig != "" {
+			item["encrypted_content"] = sig
+		}
+		output = append(output, item)
 	}
 	if text := irText(ir.Parts); text != "" {
 		output = append(output, map[string]any{
@@ -355,8 +374,15 @@ func irToResponsesResponse(ir irResponse) ([]byte, error) {
 		}
 	}
 	out["output"] = output
-	if ir.PromptTokens != 0 || ir.CompletionTokens != 0 {
-		out["usage"] = map[string]int{"input_tokens": ir.PromptTokens, "output_tokens": ir.CompletionTokens}
+	if ir.PromptTokens != 0 || ir.CompletionTokens != 0 || ir.ReasoningTokens != 0 || ir.CacheReadTokens != 0 {
+		usage := map[string]any{"input_tokens": ir.PromptTokens, "output_tokens": ir.CompletionTokens}
+		if ir.CacheReadTokens != 0 {
+			usage["input_tokens_details"] = map[string]int{"cached_tokens": ir.CacheReadTokens}
+		}
+		if ir.ReasoningTokens != 0 {
+			usage["output_tokens_details"] = map[string]int{"reasoning_tokens": ir.ReasoningTokens}
+		}
+		out["usage"] = usage
 	}
 	return json.Marshal(out)
 }

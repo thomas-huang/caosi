@@ -61,8 +61,8 @@ func geminiContentToIR(c geminiContent) []irMessage {
 			blob = p.InlineDataAlt
 		}
 		switch {
-		case p.Thought && p.Text != "":
-			main.Parts = append(main.Parts, thinkingPart(p.Text))
+		case p.Thought && (p.Text != "" || p.ThoughtSignature != ""):
+			main.Parts = append(main.Parts, irPart{Kind: irKindThinking, Text: p.Text, Signature: p.ThoughtSignature})
 		case p.Text != "":
 			main.Parts = append(main.Parts, textPart(p.Text))
 		case blob != nil && blob.Data != "":
@@ -71,6 +71,8 @@ func geminiContentToIR(c geminiContent) []irMessage {
 				mt = "image/png"
 			}
 			main.Parts = append(main.Parts, mediaPart(classifyMIME(mt), mt, blob.Data, "", ""))
+		case p.FileData != nil:
+			// Files API object — drop (ADR-0025).
 		case fc != nil:
 			args := "{}"
 			if len(fc.Args) > 0 {
@@ -154,8 +156,8 @@ func irPartsToGemini(parts []irPart) []geminiPart {
 	for _, p := range parts {
 		switch p.Kind {
 		case irKindThinking:
-			if p.Text != "" {
-				out = append(out, geminiPart{Text: p.Text, Thought: true})
+			if p.Text != "" || p.Signature != "" {
+				out = append(out, geminiPart{Text: p.Text, Thought: true, ThoughtSignature: p.Signature})
 			}
 		case irKindText:
 			if p.Text != "" {
@@ -193,6 +195,8 @@ func geminiToIRResponse(body []byte) (irResponse, error) {
 	if in.UsageMetadata != nil {
 		out.PromptTokens = in.UsageMetadata.PromptTokenCount
 		out.CompletionTokens = in.UsageMetadata.CandidatesTokenCount
+		out.ReasoningTokens = in.UsageMetadata.ThoughtsTokenCount
+		out.CacheReadTokens = in.UsageMetadata.CachedContentTokenCount
 	}
 	if len(in.Candidates) == 0 {
 		return out, nil
@@ -203,7 +207,7 @@ func geminiToIRResponse(body []byte) (irResponse, error) {
 	}
 	for _, p := range cand.Content.Parts {
 		if p.Thought {
-			out.Parts = append(out.Parts, thinkingPart(p.Text))
+			out.Parts = append(out.Parts, irPart{Kind: irKindThinking, Text: p.Text, Signature: p.ThoughtSignature})
 			continue
 		}
 		if p.Text != "" {
@@ -247,11 +251,18 @@ func irToGeminiResponse(ir irResponse) ([]byte, error) {
 			"finishReason": "STOP",
 		}},
 	}
-	if ir.PromptTokens != 0 || ir.CompletionTokens != 0 {
-		out["usageMetadata"] = map[string]int{
+	if ir.PromptTokens != 0 || ir.CompletionTokens != 0 || ir.ReasoningTokens != 0 || ir.CacheReadTokens != 0 {
+		meta := map[string]int{
 			"promptTokenCount":     ir.PromptTokens,
 			"candidatesTokenCount": ir.CompletionTokens,
 		}
+		if ir.ReasoningTokens != 0 {
+			meta["thoughtsTokenCount"] = ir.ReasoningTokens
+		}
+		if ir.CacheReadTokens != 0 {
+			meta["cachedContentTokenCount"] = ir.CacheReadTokens
+		}
+		out["usageMetadata"] = meta
 	}
 	return json.Marshal(out)
 }

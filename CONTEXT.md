@@ -41,10 +41,18 @@ A request whose Client Protocol is the same as the Provider's Upstream Protocol,
 Rewriting a request and its matching response between different Client and Upstream Protocols.
 
 **Conversion Contract**:
-The capabilities Conversion must preserve when the other protocol has an Analogue: text, system instruction, tools, thinking/reasoning, Image Parts, Document Parts, Audio Parts, and Video Parts. A part nested in a tool result is still that part. A capability with no Analogue is dropped; Conversion still sends the rest of the request.
+The capabilities Conversion must preserve when the other protocol has an Analogue: text, system instruction, tools, thinking/reasoning, Thinking Signature, Image Parts, Document Parts, Audio Parts, Video Parts, and Usage Details. A part nested in a tool result is still that part. A capability with no Analogue is dropped; Conversion still sends the rest of the request.
 
 **Analogue**:
 A field or part kind in the other protocol that can express the same Conversion Contract capability.
+
+**Thinking Signature**:
+An opaque blob on a thinking part, distinct from thinking text. Conversion remaps it only to a named Analogue on a thinking part and does not verify it.
+_Avoid_: provider_metadata, passthrough, continuation token, 续跑凭证
+
+**Usage Details**:
+The Conversion Contract subset of token counts beyond prompt and completion: reasoning tokens, cache-read tokens, and cache-create tokens.
+_Avoid_: extras, usage dump, details dictionary
 
 **IR**:
 The in-process message model Conversion remaps through. It can hold every Conversion Contract capability. It is not a wire protocol and not OpenAI Chat.

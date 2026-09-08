@@ -21,6 +21,7 @@ const (
 type irPart struct {
 	Kind      irKind
 	Text      string
+	Signature string
 	MIME      string
 	Filename  string
 	AudioFmt  string
@@ -67,6 +68,9 @@ type irResponse struct {
 	Parts            []irPart
 	PromptTokens     int
 	CompletionTokens int
+	ReasoningTokens  int
+	CacheReadTokens  int
+	CacheCreateTokens int
 	ErrorMessage     string
 	ErrorType        string
 }
@@ -182,6 +186,15 @@ func irThinking(parts []irPart) string {
 		}
 	}
 	return b.String()
+}
+
+func irThinkingSignature(parts []irPart) string {
+	for _, p := range parts {
+		if p.Kind == irKindThinking && p.Signature != "" {
+			return p.Signature
+		}
+	}
+	return ""
 }
 
 func splitIRToolCalls(parts []irPart) (rest []irPart, calls []irPart) {

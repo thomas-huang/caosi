@@ -1,33 +1,25 @@
-# Next version: media parts on the existing grid
+# Conversion Contract (frozen)
 
-caosi stays a loopback converter among OpenAI Chat, OpenAI Responses, Claude Messages, and Gemini. This version does not add endpoints, storage, URL fetch, or a Files API. It makes Conversion preserve Image, Document, Audio, and Video Parts that already arrive inside those four chat protocols.
+Loopback converter. Four protocols. Analogue tables below are the oracle. P1–P5 shipped.
 
-Domain language: [CONTEXT.md](../CONTEXT.md). Decisions: [ADR-0024](adr/0024-ir-is-not-openai-chat.md), [ADR-0025](adr/0025-media-parts-in-the-conversion-contract.md). Architecture: [architecture.md](architecture.md).
+Domain language: [CONTEXT.md](../CONTEXT.md). Architecture: [architecture.md](architecture.md). ADR-0024–0027.
 
-## Why this version
+**In:** full mesh; media Parts; Thinking Signature as thinking-part carriage; Usage Details (reasoning / cache-read / cache-create); drop when no Analogue.
 
-v1’s Conversion Contract listed image parts. Request-side images mostly remap; HTTP URLs into Gemini are dropped; `tool_result` images are flattened to text; assistant output is a string, so generated images vanish. Document, audio, and video parts have no cases and are dropped. Dedicated `/v1/images/*`, `/v1/files`, video-generation, and TTS paths stay 404.
+**Out:** new endpoints, URL fetch, Files API, gateway, shims, extras bag, invented thinking for `functionCall`, speculative incremental pairs, live CLI in `make test`.
 
-Coding agents (Claude Code, Codex, Gemini CLI) already put screenshots, PDFs, and other blobs in the same four endpoints. That is contract loss, not a new product. Gemini CLI `fileUri` and Chat/Responses `file_id` are dropped; only inline bytes and http(s) URLs convert.
+## Backlog
 
-## Product boundary
+Do not grow the contract because another project listed more fields. Order is the schedule; a later row does not start because an earlier row is boring.
 
-In:
-
-- Full mesh on the existing endpoints (ADR-0002).
-- Image, Document, Audio, Video Parts on request and response, including inside tool results.
-- Inline bytes and http(s) URLs.
-- Drop when there is no Analogue; still send the rest.
-
-Out:
-
-- Dedicated image / files / audio / video / realtime / embeddings / batch / count_tokens endpoints.
-- Fetching a URL to inline it.
-- `file_id` / Gemini `fileUri` (those are Files API objects).
-- Placeholder text such as `[video omitted]`.
-- Invented OpenAI Chat fields (`video_url`) on a Chat upstream.
-- Raising the 32MiB hop cap or chunking bodies.
-- Web UI, OAuth, key pools, blob store.
+| # | Item | When |
+| --- | --- | --- |
+| **B0** | Bugs in this contract (drop cells, Signature carriage, Usage Details, round-trip, inflation) | Always first |
+| **B1** | Gemini `thoughtSignature` on `functionCall` | Only if Claude Code × Gemini 3 × tool 400s or retries. Needs a new ADR. Do not invent a thinking block; do not add an extras bag. |
+| **B2** | A fifth incremental stream pair | Only with an ADR-0020-class empty-stream failure on a named client |
+| **B3** | Citations | Not scheduled (not a CLI break) |
+| **B4** | Block-level cache markers | Not scheduled. Auto `cache_control` stays rejected. |
+| **B5** | MCP / custom tools | Not scheduled (Responses-only Analogue) |
 
 ## IR
 
@@ -38,11 +30,12 @@ The IR is not OpenAI Chat JSON.
 ```
 IR
 ├── model, system instruction, tools, thinking config
+├── Usage Details on the response (reasoning / cache-read / cache-create tokens)
 └── messages[]
     ├── role
     └── parts[]
         ├── text
-        ├── thinking
+        ├── thinking (+ optional Thinking Signature)
         ├── tool call / tool result (tool result may contain parts)
         └── Image | Document | Audio | Video
             ├── mime
@@ -52,6 +45,8 @@ IR
 Classification: if the Client Protocol names a contract kind (`image`, `document`, `input_audio`, …), that name wins; otherwise MIME (`image/*`, `audio/*`, `video/*`, else Document Part). `data:` URLs are inline bytes, not http(s). Gemini `inlineData` with `text/plain` is a Document Part, not a text part. A Chat `image_url` whose MIME is not `image/*` stays an Image Part and is dropped if the target image Analogue cannot take that MIME — do not reclassify it as a Document Part. Unofficial Chat `video_url` is ingested as a Video Part (MIME from the payload); it is never emitted to a Chat upstream.
 
 IR stores raw bytes, MIME, optional filename, and optional audio format. Targets encode themselves (data URL vs raw base64). If the target requires a filename and the client did not send one, synthesize one from the MIME (`document.pdf`, …). IR is not Chat JSON and not a Files API.
+
+A Thinking Signature is an opaque string on a thinking part. Conversion does not parse it. Chat `reasoning_content` stays thinking text, not a Thinking Signature.
 
 ## What to copy, what to reject
 
@@ -63,11 +58,12 @@ IR stores raw bytes, MIME, optional filename, and optional audio format. Targets
 | LiteLLM | MIME routing: PDF data URL → Claude `document`, not `image`. | Chat-as-hub. HTTP GET of image URLs into base64. In-memory image cache. |
 | CLIProxyAPI (reference tree, ADR-0014) | MIME dispatch on Gemini `inlineData`. Pass HTTP URL through when the target has `source.url`. Never fetch. Do not flatten Claude `tool_result` image/document blocks to concatenated text; keep them as nested IR parts and emit only where the analogue table has a cell. | Pairwise-only maps (Claude `document` lives on one pair and dies on another). Invented Chat `video_url` toward a Chat upstream. Text placeholders. Unofficial tool-message content arrays. Mislabeling every Gemini response `inlineData` as an image. Dedicated `/v1/images` and `/v1/videos`. |
 | supermemoryai/llm-bridge | Same four-protocol hub graph. Typed `text\|image\|audio\|video\|document\|tool_*\|thinking` parts with `{url,data,mimeType}`. Pass-through URLs, no fetch. | `_original` lossless round-trip (conflicts with remap-and-forward). Unknown blocks `JSON.stringify` into text. Anthropic emit maps image only, not document. Google emit requires `media.data`, so URL-only images die. |
+| llm-rosetta | Dedicated IR (not Chat-as-hub). Analogue tables. Semantic A→IR→B→IR→A. Stream inflation (content-bearing deltas, not lifecycle envelopes). Thinking Signature as a named thinking-part field. Usage cache/reasoning counts as named fields. | Gateway / admin / embeddings / rerank. Google Interactions as a fifth protocol. Vendor shims. `provider_passthrough` / `metadata_mode`. Image placeholders and auto `cache_control`. Typed stream IR. Live CLI as default tests. |
 | new-api / Bifrost / OpenRouter | OpenRouter’s chat tags (`image_url`, `file`, `input_audio`) confirm which names exist on Chat-shaped clients. | Gateway: OCR plugins, Files API, `/images` `/videos` `/audio/speech`, failover UI. new-api drops thinking on some Gemini→OpenAI paths. |
 
-LangChain (typed kinds), Pydantic AI (analogue table), Vercel (data vs URL), llm-bridge (same four-protocol graph) are the useful IRs. LiteLLM and CLIProxyAPI show what not to do with Chat-as-hub, URL fetch, and pairwise drift.
+LangChain (typed kinds), Pydantic AI (analogue table), Vercel (data vs URL), llm-bridge (same four-protocol graph) are the useful IRs. llm-rosetta is the source for test shape and for Thinking Signature / Usage Details as named contract rows. LiteLLM and CLIProxyAPI show what not to do with Chat-as-hub, URL fetch, and pairwise drift.
 
-## Analogue table
+## Analogue table — media
 
 Emit only fields the **target wire protocol** already names. Empty / “drop” = drop that part (ADR-0018), do not invent. No “if the protocol has it.”
 
@@ -81,7 +77,7 @@ Chat `image_url` is `{type:image_url,image_url:{url}}`. Responses `input_image.i
 | Document, http(s) URL | drop | drop (`input_file` is `file_data` / `file_id`, not a URL; do not emit `file_url`) | `document` + `source.url` | drop |
 | Audio, inline | `input_audio` (`wav`/`mp3` only) | drop | drop | `inlineData` |
 | Audio, http(s) URL | drop | drop | drop | drop |
-| Video, inline | drop | drop | drop | `inlineData` |
+| Video, inline | drop (never emit `video_url`) | drop | drop | `inlineData` |
 | Video, http(s) URL | drop | drop | drop | drop (YouTube/`fileUri` are Files API objects, out of contract) |
 | `file_id` / `fileUri` / Claude `source.type=file` | drop | drop | drop | drop |
 | Chat `audio.data` bytes | `input_audio` | drop | drop | `inlineData` |
@@ -97,20 +93,37 @@ Video **emits** only toward Gemini `inlineData`. Every other target drops it. Sa
 
 Pydantic AI’s table matches this shape: Chat and Claude have no Video Analogue; Claude has no Audio Analogue; Gemini accepts inline bytes for every MIME. Google AI Studio downloading arbitrary HTTPS is a provider fetch, which caosi will not do.
 
+## Analogue table — Thinking Signature
+
+Carriage only: copy the opaque blob onto the target thinking-part field. Do not verify. Cryptographic formats are not Analogues of each other; the named field is. Passthrough still copies the real upstream signature.
+
+| | OpenAI Chat | OpenAI Responses | Claude Messages | Gemini |
+| --- | --- | --- | --- | --- |
+| Thinking Signature | drop | reasoning `encrypted_content` | `thinking.signature` | `thoughtSignature` on a **thought** part |
+| Gemini `thoughtSignature` on `functionCall` | drop | drop | drop | drop (Conversion; Passthrough keeps bytes) |
+
+Chat `reasoning_content` is thinking text, already in contract, not a Thinking Signature.
+
+Claude Code × Gemini 3 × tool can still break: the signature lives on `functionCall`, which has no thinking-part Analogue. That hole is accepted. Do not invent a thinking block to hold it.
+
+## Analogue table — Usage Details
+
+Prompt and completion counts already remap. These three are the closed set. No extras dictionary.
+
+| | OpenAI Chat | OpenAI Responses | Claude Messages | Gemini |
+| --- | --- | --- | --- | --- |
+| Reasoning tokens | `completion_tokens_details.reasoning_tokens` | `output_tokens_details.reasoning_tokens` | drop | `usageMetadata.thoughtsTokenCount` |
+| Cache-read tokens | `prompt_tokens_details.cached_tokens` | `input_tokens_details.cached_tokens` | `cache_read_input_tokens` | `usageMetadata.cachedContentTokenCount` |
+| Cache-create tokens | drop | drop | `cache_creation_input_tokens` | drop |
+
 ## Stream
 
 Incremental pairs stay text / thinking / tool-call deltas (ADR-0020) and do not go through IR. Media parts appear only on `convert.Request`, `convert.Response`, and buffered `Stream`. Do not stream invented `delta.images`. Assistant Image Parts are in-contract only when the Client Protocol has a response Analogue (Gemini `inlineData`). Chat / Claude / Responses: drop.
+
+Pairs that already emit thinking emit a Thinking Signature when present. This version does not add incremental pairs. Inflation is measured only on: Claude Messages ← OpenAI Chat, Claude Messages ← OpenAI Responses, OpenAI Responses ← OpenAI Chat, Gemini ← OpenAI Chat — content-bearing deltas, not lifecycle envelopes.
 
 ## Body size
 
 32MiB request/JSON-response cap stays. Inline video that does not fit is 413. Video that fits emits only as Gemini `inlineData`.
 
-## Delivery order
-
-1. Replace Chat JSON with IR behind `convert.Request`, `convert.Response`, and buffered `Stream` only. Incremental pairs listed in `architecture.md` do not go through IR. Stop coercing every Gemini `inlineData` into `image_url`.
-2. Close Image Part holes the contract already claimed on **request**: nested parts kept in IR (emit only where the analogue table has a cell); HTTP URLs kept on Claude/Chat/Responses; Chat HTTP URL → Gemini still dropped. Assistant images only when the client is Gemini.
-3. Document Parts (Claude `document`, Responses `input_file`, Gemini non-image `inlineData`, Chat `type:file` with `file_data`).
-4. Audio and Video Parts per the analogue table.
-5. Grid tests for each part × carriage × protocol pair, including drop cells.
-
-Passthrough, loopback, Provider File, header allowlist, and `protocol.Detect` do not change.
+P1–P5 shipped (media analogue grid, Thinking Signature, Usage Details, A→B→A, content-delta inflation). Passthrough, loopback, Provider File, header allowlist, and `protocol.Detect` do not change.

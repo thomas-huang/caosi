@@ -38,21 +38,28 @@ type responsesResp struct {
 		Type    string `json:"type"`
 	} `json:"error"`
 	Output []responsesOut `json:"output"`
-	Usage  *struct {
-		InputTokens  int `json:"input_tokens"`
-		OutputTokens int `json:"output_tokens"`
+	Usage *struct {
+		InputTokens        int `json:"input_tokens"`
+		OutputTokens       int `json:"output_tokens"`
+		InputTokensDetails *struct {
+			CachedTokens int `json:"cached_tokens"`
+		} `json:"input_tokens_details,omitempty"`
+		OutputTokensDetails *struct {
+			ReasoningTokens int `json:"reasoning_tokens"`
+		} `json:"output_tokens_details,omitempty"`
 	} `json:"usage"`
 }
 
 type responsesOut struct {
-	Type    string          `json:"type"`
-	ID      string          `json:"id,omitempty"`
-	CallID  string          `json:"call_id,omitempty"`
-	Role    string          `json:"role,omitempty"`
-	Name    string          `json:"name,omitempty"`
-	Content json.RawMessage `json:"content,omitempty"`
-	Args    string          `json:"arguments,omitempty"`
-	Summary json.RawMessage `json:"summary,omitempty"`
+	Type             string          `json:"type"`
+	ID               string          `json:"id,omitempty"`
+	CallID           string          `json:"call_id,omitempty"`
+	Role             string          `json:"role,omitempty"`
+	Name             string          `json:"name,omitempty"`
+	Content          json.RawMessage `json:"content,omitempty"`
+	Args             string          `json:"arguments,omitempty"`
+	Summary          json.RawMessage `json:"summary,omitempty"`
+	EncryptedContent string          `json:"encrypted_content,omitempty"`
 }
 
 func responsesOutputText(raw json.RawMessage) string {

@@ -97,7 +97,7 @@ export GEMINI_API_BASE=http://127.0.0.1:9999/openrouter
 - `headers` is optional extra request headers (for example OpenRouter).
 - `base_url` is a prefix. caosi does not strip `/v1`. Use the root the upstream actually expects (`https://openrouter.ai/api`, not `https://openrouter.ai/api/v1`).
 
-Same protocol is copied through. Different protocols remap the body: text, system instruction, tools, thinking, and in-message images, documents, audio, and video are kept when the other protocol can express them; otherwise that part is dropped and the rest is sent. caosi does not fetch URLs or Files API objects (`file_id`, `fileUri`). Dedicated image, files, audio, video, and embeddings paths stay 404.
+Same protocol is copied through. Different protocols remap the body: text, system instruction, tools, thinking, Thinking Signature, in-message images, documents, audio, and video, and Usage Details (reasoning / cache-read / cache-create token counts) are kept when the other protocol can express them; otherwise that part is dropped and the rest is sent. caosi does not fetch URLs or Files API objects (`file_id`, `fileUri`). Dedicated image, files, audio, video, and embeddings paths stay 404.
 
 ## Listen, health, reload
 
