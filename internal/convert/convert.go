@@ -202,43 +202,92 @@ func ModelFromBody(body []byte) string {
 }
 
 func looksLikeError(body []byte) bool {
+	_, ok := extractError(body)
+	return ok
+}
+
+type extractedError struct {
+	Message string
+	Type    string
+}
+
+func extractError(body []byte) (extractedError, bool) {
 	var m map[string]json.RawMessage
 	if json.Unmarshal(body, &m) != nil {
-		return false
+		return extractedError{}, false
 	}
-	raw, ok := m["error"]
+	if raw, ok := m["error"]; ok {
+		raw = bytes.TrimSpace(raw)
+		if len(raw) > 0 && !bytes.Equal(raw, []byte("null")) {
+			var errObj struct {
+				Message string `json:"message"`
+				Type    string `json:"type"`
+			}
+			if json.Unmarshal(raw, &errObj) != nil {
+				var s string
+				if json.Unmarshal(raw, &s) == nil && strings.TrimSpace(s) != "" {
+					return extractedError{Message: s, Type: "api_error"}, true
+				}
+				return extractedError{Message: "upstream error", Type: "api_error"}, true
+			}
+			if strings.TrimSpace(errObj.Message) != "" {
+				typ := errObj.Type
+				if typ == "" {
+					typ = "api_error"
+				}
+				return extractedError{Message: errObj.Message, Type: typ}, true
+			}
+		}
+	}
+	if !gatewayErrorShape(m) {
+		return extractedError{}, false
+	}
+	var msg string
+	_ = json.Unmarshal(m["message"], &msg)
+	msg = strings.TrimSpace(msg)
+	if msg == "" {
+		return extractedError{}, false
+	}
+	typ := "api_error"
+	var codeStr string
+	if json.Unmarshal(m["code"], &codeStr) == nil && strings.TrimSpace(codeStr) != "" {
+		typ = codeStr
+	}
+	return extractedError{Message: msg, Type: typ}, true
+}
+
+func gatewayErrorShape(m map[string]json.RawMessage) bool {
+	code, ok := m["code"]
 	if !ok {
 		return false
 	}
-	raw = bytes.TrimSpace(raw)
-	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+	code = bytes.TrimSpace(code)
+	if len(code) == 0 || bytes.Equal(code, []byte("null")) {
 		return false
 	}
-	var errObj struct {
-		Message string `json:"message"`
+	if _, ok := m["choices"]; ok {
+		return false
 	}
-	if json.Unmarshal(raw, &errObj) != nil {
-		return true
+	if _, ok := m["candidates"]; ok {
+		return false
 	}
-	return strings.TrimSpace(errObj.Message) != ""
+	if _, ok := m["output"]; ok {
+		return false
+	}
+	var typ string
+	_ = json.Unmarshal(m["type"], &typ)
+	return typ != "message"
 }
 
 func translateError(client config.Protocol, body []byte) ([]byte, error) {
 	msg := "upstream error"
 	typ := "api_error"
-	var wrap struct {
-		Error *struct {
-			Message string `json:"message"`
-			Type    string `json:"type"`
-			Status  string `json:"status"`
-		} `json:"error"`
-		Type string `json:"type"`
-	}
-	_ = json.Unmarshal(body, &wrap)
-	if wrap.Error != nil && wrap.Error.Message != "" {
-		msg = wrap.Error.Message
-		if wrap.Error.Type != "" {
-			typ = wrap.Error.Type
+	if ex, ok := extractError(body); ok {
+		if ex.Message != "" {
+			msg = ex.Message
+		}
+		if ex.Type != "" {
+			typ = ex.Type
 		}
 	}
 	_, b, _ := ClientError(client, 400, msg)

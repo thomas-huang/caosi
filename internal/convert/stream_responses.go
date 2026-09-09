@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+
+	"github.com/thomas-huang/caosi/internal/config"
 )
 
 func openAIChatStreamToResponses(r io.Reader, w io.Writer) error {
@@ -26,6 +28,9 @@ func openAIChatStreamToResponses(r io.Reader, w io.Writer) error {
 		if err := st.feed(line, w); err != nil {
 			return err
 		}
+		if st.stopped {
+			return nil
+		}
 	}
 	if err := sc.Err(); err != nil {
 		return err
@@ -44,6 +49,14 @@ type respStreamState struct {
 }
 
 func (s *respStreamState) feed(raw []byte, w io.Writer) error {
+	if looksLikeError(raw) {
+		out, err := translateError(config.ProtocolOpenAIResponses, raw)
+		if err != nil {
+			return err
+		}
+		s.stopped = true
+		return writeResponsesEvent(w, "error", out)
+	}
 	var generic map[string]json.RawMessage
 	if json.Unmarshal(raw, &generic) != nil {
 		return nil
@@ -144,6 +157,14 @@ func openAIChatStreamToGemini(r io.Reader, w io.Writer) error {
 		var generic map[string]json.RawMessage
 		if json.Unmarshal(line, &generic) != nil {
 			continue
+		}
+		if looksLikeError(line) {
+			out, err := translateError(config.ProtocolGemini, line)
+			if err != nil {
+				return err
+			}
+			_, err = fmt.Fprintf(w, "data: %s\n\n", out)
+			return err
 		}
 		if choices, ok := generic["choices"]; ok {
 			var chs []map[string]json.RawMessage

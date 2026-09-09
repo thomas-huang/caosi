@@ -101,6 +101,51 @@ func TestResponse_ChatToClaude_ErrorBody(t *testing.T) {
 	}
 }
 
+func TestResponse_GatewayCodeMessage_IsClientError(t *testing.T) {
+	// Live Claude/gateway 400: top-level code+message, no "error" object.
+	in := []byte(`{"request_id":"9aaacc31-0f6d-425b-818a-98b63c3ae714","code":"InvalidParameter","message":"The file format is illegal and cannot be opened"}`)
+	cases := []struct {
+		client config.Protocol
+		want   []string
+		leak   []string
+	}{
+		{
+			client: config.ProtocolOpenAIChat,
+			want:   []string{`"error"`, "The file format is illegal and cannot be opened"},
+			leak:   []string{`"choices"`, `"chatcmpl_caosi"`},
+		},
+		{
+			client: config.ProtocolOpenAIResponses,
+			want:   []string{`"error"`, "The file format is illegal and cannot be opened"},
+			leak:   []string{`"output"`, `"resp_caosi"`, `"status":"completed"`},
+		},
+		{
+			client: config.ProtocolGemini,
+			want:   []string{`"error"`, "The file format is illegal and cannot be opened", `"status"`},
+			leak:   []string{`"candidates"`},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(string(tc.client), func(t *testing.T) {
+			out, err := Response(tc.client, config.ProtocolClaudeMessages, in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			s := string(out)
+			for _, w := range tc.want {
+				if !strings.Contains(s, w) {
+					t.Fatalf("missing %q in %s", w, s)
+				}
+			}
+			for _, leak := range tc.leak {
+				if strings.Contains(s, leak) {
+					t.Fatalf("leaked %q in %s", leak, s)
+				}
+			}
+		})
+	}
+}
+
 func TestPassthroughApplyModel(t *testing.T) {
 	in := []byte(`{"model":"gpt-4","messages":[]}`)
 	out, err := Request(config.ProtocolOpenAIChat, config.ProtocolOpenAIChat, in, "deepseek-chat", false)

@@ -253,6 +253,33 @@ func TestStream_ClaudeFromResponses_CompletedSnapshotWithoutDeltas(t *testing.T)
 	}
 }
 
+func TestStream_ChatErrorToResponsesAndGemini(t *testing.T) {
+	in := "data: {\"error\":{\"code\":\"invalid_image\",\"param\":null,\"message\":\"The file format is illegal and cannot be opened\",\"type\":\"invalid_request_error\"},\"id\":\"chatcmpl-baae9234-56d0-42bf-a578-ece755e24f08\"}\n\n"
+	var out bytes.Buffer
+	if err := Stream(config.ProtocolOpenAIResponses, config.ProtocolOpenAIChat, strings.NewReader(in), &out); err != nil {
+		t.Fatal(err)
+	}
+	s := out.String()
+	if !strings.Contains(s, `"error"`) || !strings.Contains(s, "The file format is illegal and cannot be opened") {
+		t.Fatalf("want Responses error, got\n%s", s)
+	}
+	if strings.Contains(s, "response.completed") || strings.Contains(s, `"status":"completed"`) {
+		t.Fatalf("error became success stream:\n%s", s)
+	}
+
+	out.Reset()
+	if err := Stream(config.ProtocolGemini, config.ProtocolOpenAIChat, strings.NewReader(in), &out); err != nil {
+		t.Fatal(err)
+	}
+	gs := out.String()
+	if !strings.Contains(gs, `"error"`) || !strings.Contains(gs, "The file format is illegal and cannot be opened") {
+		t.Fatalf("want Gemini error, got\n%s", gs)
+	}
+	if strings.Contains(gs, `"candidates"`) {
+		t.Fatalf("error became Gemini success:\n%s", gs)
+	}
+}
+
 func TestStream_ClaudeFromResponses_ErrorJSON(t *testing.T) {
 	in := `{"error":{"message":"quota","type":"insufficient_quota"}}`
 	var out bytes.Buffer
