@@ -20,6 +20,9 @@ func NeedsConvert(client, upstream config.Protocol) bool {
 
 func UpstreamPath(client, upstream config.Protocol, clientPath, model string, stream bool) string {
 	if client == upstream {
+		if upstream == config.ProtocolGemini && model != "" {
+			return geminiUpstreamPath(model, stream)
+		}
 		return clientPath
 	}
 	switch upstream {
@@ -30,16 +33,20 @@ func UpstreamPath(client, upstream config.Protocol, clientPath, model string, st
 	case config.ProtocolClaudeMessages:
 		return "/v1/messages"
 	case config.ProtocolGemini:
-		if model == "" {
-			model = "gemini-pro"
-		}
-		action := "generateContent"
-		if stream {
-			action = "streamGenerateContent"
-		}
-		return "/v1beta/models/" + model + ":" + action
+		return geminiUpstreamPath(model, stream)
 	}
 	return clientPath
+}
+
+func geminiUpstreamPath(model string, stream bool) string {
+	if model == "" {
+		model = "gemini-pro"
+	}
+	action := "generateContent"
+	if stream {
+		action = "streamGenerateContent"
+	}
+	return "/v1beta/models/" + model + ":" + action
 }
 
 func UnsupportedMessage(client, upstream config.Protocol) string {

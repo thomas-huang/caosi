@@ -264,6 +264,18 @@ func TestNeedsConvertUpstreamPathAndModel(t *testing.T) {
 	if got != "/v1beta/models/gemini-pro:streamGenerateContent" {
 		t.Fatalf("gemini stream default model: %s", got)
 	}
+	got = UpstreamPath(config.ProtocolGemini, config.ProtocolGemini, "/v1beta/models/live:generateContent", "gemini-2.5-flash-lite", false)
+	if got != "/v1beta/models/gemini-2.5-flash-lite:generateContent" {
+		t.Fatalf("gemini identity model override: %s", got)
+	}
+	got = UpstreamPath(config.ProtocolGemini, config.ProtocolGemini, "/v1beta/models/live:streamGenerateContent", "gemini-2.5-flash-lite", true)
+	if got != "/v1beta/models/gemini-2.5-flash-lite:streamGenerateContent" {
+		t.Fatalf("gemini identity stream model override: %s", got)
+	}
+	got = UpstreamPath(config.ProtocolGemini, config.ProtocolGemini, "/v1beta/models/live:generateContent", "", false)
+	if got != "/v1beta/models/live:generateContent" {
+		t.Fatalf("gemini identity without override: %s", got)
+	}
 	msg := UnsupportedMessage(config.ProtocolOpenAIChat, config.ProtocolGemini)
 	if !strings.Contains(msg, string(config.ProtocolOpenAIChat)) || !strings.Contains(msg, string(config.ProtocolGemini)) {
 		t.Fatalf("unsupported message: %s", msg)

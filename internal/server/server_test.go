@@ -303,6 +303,47 @@ func TestConversion_ClaudeClientResponsesUpstream(t *testing.T) {
 	}
 }
 
+func TestHop_GeminiIdentityAppliesModelOverrideToURL(t *testing.T) {
+	var sawPath string
+	s, _ := testServer(t, config.ProtocolGemini, func(w http.ResponseWriter, r *http.Request) {
+		sawPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"candidates":[{"content":{"role":"model","parts":[{"text":"ok"}]},"finishReason":"STOP"}]}`))
+	})
+	req := httptest.NewRequest(http.MethodPost, "/ds/v1beta/models/live:generateContent", strings.NewReader(`{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if rr.Code != 200 {
+		t.Fatalf("status %d %s", rr.Code, rr.Body.Bytes())
+	}
+	if sawPath != "/v1beta/models/deepseek-chat:generateContent" {
+		t.Fatalf("upstream path %s (Model Override not applied to Gemini URL)", sawPath)
+	}
+	if !strings.Contains(rr.Body.String(), `"candidates"`) {
+		t.Fatalf("want Gemini body: %s", rr.Body.Bytes())
+	}
+}
+
+func TestHop_GeminiIdentityStreamAppliesModelOverrideToURL(t *testing.T) {
+	var sawPath string
+	s, _ := testServer(t, config.ProtocolGemini, func(w http.ResponseWriter, r *http.Request) {
+		sawPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"candidates":[{"content":{"role":"model","parts":[{"text":"ok"}]},"finishReason":"STOP"}]}`))
+	})
+	req := httptest.NewRequest(http.MethodPost, "/ds/v1beta/models/live:streamGenerateContent", strings.NewReader(`{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if rr.Code != 200 {
+		t.Fatalf("status %d %s", rr.Code, rr.Body.Bytes())
+	}
+	if sawPath != "/v1beta/models/deepseek-chat:streamGenerateContent" {
+		t.Fatalf("upstream path %s (Model Override not applied to Gemini stream URL)", sawPath)
+	}
+}
+
 func TestConversion_GeminiClientChatUpstream(t *testing.T) {
 	s, _ := testServer(t, config.ProtocolOpenAIChat, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
